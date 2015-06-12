@@ -15,7 +15,8 @@ module RWPAS.Level
   , actorById
   , tryMoveActor
   , Size
-  , LevelCoordinates )
+  , LevelCoordinates
+  , levelFieldOfView )
   where
 
 import           Control.Lens hiding ( Level )
@@ -29,6 +30,7 @@ import           GHC.Generics
 import           Linear.V2
 import           RWPAS.Actor
 import           RWPAS.Direction
+import           RWPAS.FieldOfView
 
 data Level = Level
   { _terrain :: Map LevelCoordinates TerrainFeature
@@ -94,6 +96,10 @@ impassable :: TerrainFeature -> Bool
 impassable Floor = False
 impassable _ = True
 
+seeThrough :: TerrainFeature -> Bool
+seeThrough Floor = True
+seeThrough _ = False
+
 insertActor :: ActorID -> Actor -> Level -> Level
 insertActor aid actor = actors.at aid .~ Just actor
 
@@ -106,4 +112,26 @@ tryMoveActor aid dir level = do
   if impassable (level^.terrainFeature new_actor_pos)
     then Nothing
     else Just $ level & actors.at aid .~ Just (actor & position .~ new_actor_pos)
+
+levelFieldOfView :: Monad m
+                 => LevelCoordinates
+                 -> Level
+                 -> (LevelCoordinates -> m ())
+                 -> m ()
+levelFieldOfView coords level i_see =
+  computeFieldOfView i_see
+             (\coords -> seeThrough (level^.terrainFeature coords))
+             ByDirection
+             { _leftD      = \(V2 x y) -> return $ Just $ V2 (x-1) y
+             , _rightD     = \(V2 x y) -> return $ Just $ V2 (x+1) y
+             , _upD        = \(V2 x y) -> return $ Just $ V2 x (y-1)
+             , _downD      = \(V2 x y) -> return $ Just $ V2 x (y+1)
+             , _leftupD    = \(V2 x y) -> return $ Just $ V2 (x-1) (y-1)
+             , _leftdownD  = \(V2 x y) -> return $ Just $ V2 (x-1) (y+1)
+             , _uprightD   = \(V2 x y) -> return $ Just $ V2 (x+1) (y-1)
+             , _downrightD = \(V2 x y) -> return $ Just $ V2 (x+1) (y+1) }
+             coords
+             30
+             30
+{-# INLINE levelFieldOfView #-}
 
