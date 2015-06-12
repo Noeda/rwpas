@@ -7,23 +7,32 @@
 module RWPAS.Level
   ( Level()
   , TerrainFeature(..)
+  , insertActor
   , emptyLevel
   , roomLevel
   , terrainFeature
+  , actors
+  , actorById
+  , tryMoveActor
   , Size
   , LevelCoordinates )
   where
 
 import           Control.Lens hiding ( Level )
 import           Data.Data
-import qualified Data.Map.Strict ( Map )
+import           Data.IntMap ( IntMap )
+import qualified Data.IntMap as IM
+import           Data.Map.Strict ( Map )
 import qualified Data.Map.Strict as M
 import           Data.Maybe
 import           GHC.Generics
 import           Linear.V2
+import           RWPAS.Actor
+import           RWPAS.Direction
 
 data Level = Level
-  { _terrain :: M.Map LevelCoordinates TerrainFeature }
+  { _terrain :: Map LevelCoordinates TerrainFeature
+  , _actors  :: IntMap Actor }
   deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
 
 -- | Coordinates relative to some `Level`.
@@ -47,13 +56,15 @@ makeLenses ''Level
 
 -- | A completely empty level.
 emptyLevel :: Level
-emptyLevel = Level { _terrain = mempty }
+emptyLevel = Level { _terrain = mempty
+                   , _actors  = mempty }
 
 -- | A level that just has a single rectangular room. The walkable area is
 -- sized according to the given coordinates, with (0, 0) being the top-left
 -- corner of the room.
 roomLevel :: Size -> Level
-roomLevel (V2 w h) = Level { _terrain = makeOneRoom w h }
+roomLevel (V2 w h) = Level { _terrain = makeOneRoom w h
+                           , _actors  = mempty }
  where
   makeOneRoom w h = M.union
     -- The floor on the insides
@@ -74,4 +85,25 @@ terrainFeature coordinates = lens get_it set_it
     level & terrain.at coordinates .~ Nothing
                  | otherwise =
     level & terrain.at coordinates .~ Just f
+
+-- | Lens to an actor using some actor ID.
+actorById :: ActorID -> Lens' Level (Maybe Actor)
+actorById aid = actors.at aid
+
+impassable :: TerrainFeature -> Bool
+impassable Floor = False
+impassable _ = True
+
+insertActor :: ActorID -> Actor -> Level -> Level
+insertActor aid actor = actors.at aid .~ Just actor
+
+tryMoveActor :: ActorID -> Direction -> Level -> Maybe Level
+tryMoveActor aid dir level = do
+  actor <- IM.lookup aid (level^.actors)
+  let actor_pos = actor^.position
+      new_actor_pos = directionToDelta dir + actor_pos
+
+  if impassable (level^.terrainFeature new_actor_pos)
+    then Nothing
+    else Just $ level & actors.at aid .~ Just (actor & position .~ new_actor_pos)
 

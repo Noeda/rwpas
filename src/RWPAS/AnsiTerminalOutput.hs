@@ -13,9 +13,11 @@ module RWPAS.AnsiTerminalOutput
   )
   where
 
-import Control.Concurrent
 import Control.Exception
 import Control.Lens hiding ( Level )
+import Control.Monad
+import Control.Monad.IO.Class
+import Control.Monad.State.Strict
 import Data.Foldable
 import Data.Data
 import Foreign.C.Types
@@ -24,6 +26,9 @@ import Foreign.Ptr
 import Foreign.Storable
 import GHC.Generics
 import Linear.V2
+import RWPAS.Actor
+import RWPAS.Control
+import RWPAS.Direction
 import RWPAS.Level
 import System.Console.ANSI
 import System.IO
@@ -84,7 +89,38 @@ splashScreen = do
 
 startGame :: IO ()
 startGame = do
-  writeLevel (V2 (-5) (-5)) (roomLevel (V2 10 10))
+  let initial_world = singletonWorld (roomLevel (V2 20 20))
+
+  void $ flip execStateT initial_world $ forever $ do
+    world <- get
+    V2 tw th <- liftIO getWindowSize
+
+    let (level, actor) = currentActorLevelAndCoordinates world
+        actor_pos = actor^.position
+        offset = V2 ((actor_pos^._x) - (tw `div` 2))
+                    ((actor_pos^._y) - (th `div` 2))
+
+    liftIO $ writeLevel offset level
+
+    cmd <- liftIO getNextCommand
+    modify $ performCommand cmd
+ where
+  getNextCommand = do
+    maybe_cmd <- charToCommand <$> getChar
+    case maybe_cmd of
+      Nothing -> getNextCommand
+      Just cmd -> return cmd
+
+
+charToCommand :: Char -> Maybe Command
+charToCommand 'h' = Just (Move DLeft)
+charToCommand 'k' = Just (Move DUp)
+charToCommand 'j' = Just (Move DDown)
+charToCommand 'l' = Just (Move DRight)
+charToCommand _ = Nothing
+
+appearanceToCell :: ActorAppearance -> Square
+appearanceToCell PlayerCharacter = Square '@' White Black
 
 -- | Mapping from level features to characters to show on screen.
 featureToCell :: TerrainFeature -> Square
@@ -103,16 +139,31 @@ writeLevel offset level = do
   -- less.
   setSGR [Reset]
   V2 tw th <- getWindowSize
-  print (tw, th)
+
+  let set_cell_attributes cell =
+        setSGR [SetColor Foreground Dull (cell^.foregroundColor)
+               ,SetColor Background Dull (cell^.backgroundColor)]
+
   for_ [0..th-1] $ \y -> do
     setCursorPosition y 0
     for_ [0..tw-1] $ \x -> do
       let feature = level^.terrainFeature (V2 x y + offset)
           cell = featureToCell feature
 
-      setSGR [SetColor Foreground Dull (cell^.foregroundColor)
-             ,SetColor Background Dull (cell^.backgroundColor)]
+      set_cell_attributes cell
       putChar (cell^.character)
+
+  for_ (level^.actors) $ \actor -> do
+    let actor_pos@(V2 ax ay) = actor^.position - offset
+        cell = appearanceToCell $ actor^.appearance
+
+    unless (ax < 0 || ay < 0 || ax >= tw || ay >= th) $ do
+      setCursorPosition (actor_pos^._y) (actor_pos^._x)
+
+      set_cell_attributes cell
+      putChar (cell^.character)
+
+  hFlush stdout
+
   setCursorPosition 0 0
-  threadDelay 10000000
 
