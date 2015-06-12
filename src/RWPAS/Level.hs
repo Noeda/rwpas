@@ -131,7 +131,7 @@ levelFieldOfView coords level i_see =
              , _uprightD   = \(V2 x y) -> return $ Just $ V2 (x+1) (y-1)
              , _downrightD = \(V2 x y) -> return $ Just $ V2 (x+1) (y+1) }
              coords
-             30
-             30
+             25
+             25
 {-# INLINE levelFieldOfView #-}
 

@@ -71,6 +71,10 @@ rotate90 (ByDirection{..}) = ByDirection
   , _leftdownD = _downrightD }
 
 -- | Computes the field of view in two dimensions.
+--
+-- Very expensive with the current algorithm. The benchmark says 10ms to
+-- compute the view for 100x100 completely open area (which is the most
+-- pathological case).
 computeFieldOfView :: (Monad m, Ord a)
            => (a -> m ()) -- ^ I can see this square. May be called more than once.
            -> (a -> Bool) -- ^ Can you see through this square?

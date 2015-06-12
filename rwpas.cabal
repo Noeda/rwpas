@@ -38,3 +38,16 @@ executable             rwpas
   ghc-options:         -Wall -fno-warn-name-shadowing -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
 
+benchmark              fov-calculation
+  type:                exitcode-stdio-1.0
+  main-is:             Main.hs
+  build-depends:       base
+                      ,criterion >=1.1 && <2.0
+                      ,linear
+                      ,rwpas
+                      ,transformers
+  hs-source-dirs:      fov-calculation-benchmark
+  ghc-options:         -Wall -fno-warn-name-shadowing -threaded -rtsopts -with-rtsopts=-N
+  default-language:    Haskell2010
+
+
