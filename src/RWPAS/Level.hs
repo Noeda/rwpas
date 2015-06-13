@@ -33,20 +33,19 @@ import qualified Data.IntSet as IS
 import           Data.IntMap ( IntMap )
 import qualified Data.IntMap as IM
 import           Data.Map.Strict ( Map )
-import qualified Data.Map.Strict as M
-import           Data.Maybe
 import           GHC.Generics
 import           Linear.V2
 import           RWPAS.Actor
 import           RWPAS.Direction
 import           RWPAS.FieldOfView
+import           RWPAS.TwoDimensionalVector
 
 data Level = Level
-  { _terrain    :: !(Map LevelCoordinates TerrainFeature)
-  , _portals    :: !(IntMap Portal)
-  , _portalKeys :: !(Map LevelCoordinates IntSet)
-  , _actorKeys  :: !(Map LevelCoordinates ActorID)
-  , _actors     :: !(IntMap Actor) }
+  { _terrain       :: !Vector2D
+  , _portals       :: !(IntMap Portal)
+  , _portalKeys    :: !(Map LevelCoordinates IntSet)
+  , _actorKeys     :: !(Map LevelCoordinates ActorID)
+  , _actors        :: !(IntMap Actor) }
   deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
 
 -- | Coordinates relative to some `Level`.
@@ -122,7 +121,7 @@ addPortal portal portal_id = execState $ do
 
 -- | A completely empty level.
 emptyLevel :: Level
-emptyLevel = Level { _terrain    = mempty
+emptyLevel = Level { _terrain    = generate 1 1 $ \_ _ -> fromIntegral $ fromEnum defaultTerrainFeature
                    , _actors     = mempty
                    , _actorKeys  = mempty
                    , _portals    = mempty
@@ -137,25 +136,25 @@ portalOnRightSideLevel sz@(V2 w h) pid pid2 lid =
   let initial_level = roomLevel sz
    in addPortal Portal { _axis = DLeft
                        , _targetLevel = lid
-                       , _targetLevelAxisTopPosition = 0
-                       , _targetLevelAxisPosition    = w
-                       , _portalLength = h
-                       , _axisTopPosition = 0
-                       , _axisPosition = 0 }
+                       , _targetLevelAxisTopPosition = 1
+                       , _targetLevelAxisPosition    = w-1
+                       , _portalLength = h-1
+                       , _axisTopPosition = 1
+                       , _axisPosition = 1 }
                 pid2 $
       addPortal Portal { _axis = DRight
                        , _targetLevel = lid
-                       , _targetLevelAxisTopPosition = 0
-                       , _targetLevelAxisPosition = 0
-                       , _portalLength = h
-                       , _axisTopPosition = 0
-                       , _axisPosition = w }
+                       , _targetLevelAxisTopPosition = 1
+                       , _targetLevelAxisPosition = 1
+                       , _portalLength = h-1
+                       , _axisTopPosition = 1
+                       , _axisPosition = w-1 }
                 pid
                 initial_level
 
 -- | A level that just has a single rectangular room. The walkable area is
--- sized according to the given coordinates, with (0, 0) being the top-left
--- corner of the room.
+-- sized according to the given coordinates, with (1, 1) being the top-left
+-- corner of the room and (0, 0) is top-left wall.
 roomLevel :: Size -> Level
 roomLevel (V2 w h) = Level { _terrain    = makeOneRoom w h
                            , _actors     = mempty
@@ -163,25 +162,16 @@ roomLevel (V2 w h) = Level { _terrain    = makeOneRoom w h
                            , _portals    = mempty
                            , _portalKeys = mempty }
  where
-  makeOneRoom w h = M.union
-    -- The floor on the insides
-    (M.fromList [ (V2 x y, Floor) | x <- [0..w-1], y <- [0..h-1] ])
-    -- The walls on the sides
-    (M.union (M.union (M.fromList [ (V2 (-1) y, Wall) | y <- [-1..h]])
-                      (M.fromList [ (V2 w y, Wall) | y <- [-1..h]]))
-             (M.union (M.fromList [ (V2 x (-1), Wall) | x <- [-1..w]])
-                      (M.fromList [ (V2 x h, Wall) | x <- [-1..w]])))
+  makeOneRoom w h = generate (w+1) (h+1) $ \x y ->
+    if x == 0 || y == 0 || x == w || y == h
+      then fromIntegral $ fromEnum Wall
+      else fromIntegral $ fromEnum Floor
 
 -- | Lens to a terrain feature at some location.
-terrainFeature :: LevelCoordinates -> Lens' Level TerrainFeature
-terrainFeature coordinates = lens get_it set_it
- where
-  get_it level = fromMaybe defaultTerrainFeature $ level^.terrain.at coordinates
-
-  set_it level f | f == defaultTerrainFeature =
-    level & terrain.at coordinates .~ Nothing
-                 | otherwise =
-    level & terrain.at coordinates .~ Just f
+terrainFeature :: LevelCoordinates -> Level -> TerrainFeature
+terrainFeature coords level =
+  toEnum $ fromIntegral $ getAt coords (level^.terrain) (fromIntegral $ fromEnum Rock)
+{-# INLINE terrainFeature #-}
 
 -- | Lens to an actor using some actor ID.
 actorById :: ActorID -> Lens' Level (Maybe Actor)
@@ -210,7 +200,7 @@ tryMoveActor aid dir source_level_id level get_level = do
 
   case step (direction4To8 dir) actor_pos level of
     SameLevel new_actor_pos ->
-      if impassable (level^.terrainFeature new_actor_pos)
+      if impassable (terrainFeature new_actor_pos level)
         then Nothing
         else Just (level &
                    (actorKeys.at new_actor_pos .~ Just aid) .
@@ -225,7 +215,7 @@ tryMoveActor aid dir source_level_id level get_level = do
       -- level.
       case get_level new_level_id of
         Nothing        -> Nothing
-        Just new_level -> if impassable (new_level^.terrainFeature new_actor_pos)
+        Just new_level -> if impassable (terrainFeature new_actor_pos new_level)
             then Nothing
             else Just (level & (actors.at aid .~ Nothing) .
                                (actorKeys.at actor_pos .~ Nothing)
@@ -316,7 +306,7 @@ levelFieldOfView coords level get_level i_see =
                   lift $ i_see coords offset_coords lvl)
                (\(AugmentedCoords coords _) -> do
                   lvl <- get
-                  return $ seeThrough (lvl^.terrainFeature coords))
+                  return $ seeThrough (terrainFeature coords lvl))
                ByDirection
                { _leftD      = goThrough D8Left
                , _rightD     = goThrough D8Right

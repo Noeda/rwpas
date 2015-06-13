@@ -218,12 +218,12 @@ writeLevel offset base_coords level get_level cache = do
             let tcoords = V2 x y
              in modifier (Square ' ' White Black) tcoords
 
-        levelFieldOfView base_coords level get_level $ \fcoords coords@(V2 cx cy) lvl -> do
+        levelFieldOfView base_coords level get_level $ \fcoords coords lvl -> do
           let tcoords@(V2 x y) = coords - offset
           when (x >= 0 && y >= 0 && x < tw && y < th) $
             let put_cell cell = modifier cell tcoords
              in case actorByCoordinates fcoords lvl of
-                  Nothing -> let feature = lvl^.terrainFeature fcoords
+                  Nothing -> let feature = terrainFeature fcoords lvl
                                  cell = featureToCell feature
                               in put_cell cell
                   Just aid -> case lvl^.actorById aid of

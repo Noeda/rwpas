@@ -19,6 +19,7 @@ import           Data.IntMap ( IntMap )
 import qualified Data.IntMap.Strict as IM
 import           Data.Maybe
 import           GHC.Generics
+import           Linear.V2
 import           RWPAS.Actor
 import           RWPAS.Direction
 import           RWPAS.Level
@@ -40,7 +41,7 @@ levelById lid = levels.at lid
 
 singletonWorld :: Level -> World
 singletonWorld initial_level = World
-  { _levels       = IM.singleton 0 (insertActor 1 sentinelActor initial_level)
+  { _levels       = IM.singleton 0 (insertActor 1 (sentinelActor & position .~ V2 1 1) initial_level)
   , _currentLevel = 0
   , _currentActor = 1
   , _runningID    = 2 }
