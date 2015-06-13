@@ -6,6 +6,7 @@
 
 module Main ( main ) where
 
+import Control.Lens
 import Control.Monad.Trans.State.Strict
 import Criterion
 import Criterion.Main
@@ -22,5 +23,6 @@ main =
                    whnf (`execState` (0 :: Int)) $
                    levelFieldOfView (V2 100 100)
                                     level
-                                    (\(!_) -> modify (+1))]
+                                    (\lid -> initial_world^.levelById lid)
+                                    (\(!_) (!_) (!_) -> modify (+1))]
 

@@ -20,6 +20,7 @@ import Control.Monad.IO.Class
 import Control.Monad.State.Strict
 import Data.Foldable
 import Data.Data
+import qualified Data.Map.Strict as M
 import Foreign.C.Types
 import Foreign.Marshal.Alloc
 import Foreign.Ptr
@@ -89,7 +90,7 @@ splashScreen = do
 
 startGame :: IO ()
 startGame = do
-  let initial_world = singletonWorld (roomLevel (V2 20 20))
+  let initial_world = singletonWorld (portalOnRightSideLevel (V2 20 20) 2 3 0)
 
   void $ flip execStateT initial_world $ forever $ do
     world <- get
@@ -100,7 +101,10 @@ startGame = do
         offset = V2 ((actor_pos^._x) - (tw `div` 2))
                     ((actor_pos^._y) - (th `div` 2))
 
-    liftIO $ writeLevel offset level
+    liftIO $ writeLevel offset
+                        actor_pos
+                        level
+                        (\lid -> world^.levelById lid)
 
     cmd <- liftIO getNextCommand
     modify $ performCommand cmd
@@ -132,11 +136,14 @@ featureToCell Rock = Square ' ' White Black
 --
 -- This overwrites the whole screen.
 writeLevel :: Offset
+           -> LevelCoordinates
            -> Level
+           -> (LevelID -> Maybe Level)
            -> IO ()
-writeLevel offset level = do
+writeLevel offset base_coords level get_level = do
   -- TODO: don't so wastefully write to terminal, we could get by with much
   -- less.
+  clearScreen
   setSGR [Reset]
   V2 tw th <- getWindowSize
 
@@ -144,22 +151,22 @@ writeLevel offset level = do
         setSGR [SetColor Foreground Dull (cell^.foregroundColor)
                ,SetColor Background Dull (cell^.backgroundColor)]
 
-  for_ [0..th-1] $ \y -> do
-    setCursorPosition y 0
-    for_ [0..tw-1] $ \x -> do
-      let feature = level^.terrainFeature (V2 x y + offset)
-          cell = featureToCell feature
+  let see_map = flip execState M.empty $
+        levelFieldOfView base_coords level get_level $ \fcoords coords lvl ->
+          case actorByCoordinates fcoords lvl of
+            Nothing -> let feature = lvl^.terrainFeature fcoords
+                           cell = featureToCell feature
+                        in modify $ M.insert coords cell
+            Just aid -> case lvl^.actorById aid of
+              Nothing -> return ()
+              Just actor ->
+                let cell = appearanceToCell $ actor^.appearance
+                 in modify $ M.insert coords cell
 
-      set_cell_attributes cell
-      putChar (cell^.character)
-
-  for_ (level^.actors) $ \actor -> do
-    let actor_pos@(V2 ax ay) = actor^.position - offset
-        cell = appearanceToCell $ actor^.appearance
-
-    unless (ax < 0 || ay < 0 || ax >= tw || ay >= th) $ do
-      setCursorPosition (actor_pos^._y) (actor_pos^._x)
-
+  for_ (M.assocs see_map) $ \(coords, cell) -> do
+    let (V2 x y) = coords - offset
+    when (x >= 0 && y >= 0 && x < tw && y < th) $ do
+      setCursorPosition y x
       set_cell_attributes cell
       putChar (cell^.character)
 

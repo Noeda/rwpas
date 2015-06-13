@@ -2,6 +2,7 @@
 -- easily used in portal implementaiton.
 --
 
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -23,10 +24,9 @@ module RWPAS.FieldOfView
 
 import Control.Lens
 import Control.Monad
-import Control.Monad.State.Strict
 import Data.Data
-import Data.Foldable
 import GHC.Generics
+import Linear.V2
 
 data ByDirection a = ByDirection
   { _leftD :: !a
@@ -38,13 +38,7 @@ data ByDirection a = ByDirection
   , _downD :: !a
   , _downrightD :: !a }
   deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic, Functor, Foldable, Traversable )
-makeLensesFor [("_leftD", "leftD")
-              ,("_rightD", "rightD")
-              ,("_uprightD", "uprightD")
-              ,("_upD", "upD")
-              ,("_downD", "downD")
-              ,("_downrightD", "downrightD")]
-              ''ByDirection
+makeLenses ''ByDirection
 
 flipX :: ByDirection a -> ByDirection a
 flipX (ByDirection{..}) = ByDirection
@@ -57,9 +51,20 @@ flipX (ByDirection{..}) = ByDirection
   , _upD = _upD
   , _downD = _downD }
 
-rotate90 :: ByDirection a -> ByDirection a
+flipY :: ByDirection a -> ByDirection a
+flipY (ByDirection{..}) = ByDirection
+  { _leftD = _leftD
+  , _rightD = _rightD
+  , _leftupD = _leftdownD
+  , _uprightD = _downrightD
+  , _leftdownD = _leftupD
+  , _downrightD = _uprightD
+  , _upD = _downD
+  , _downD = _upD }
+
+-- Rotate clockwise
+{-rotate90 :: ByDirection a -> ByDirection a
 rotate90 (ByDirection{..}) = ByDirection
-  -- Rotate clockwise
   { _leftD = _downD
   , _upD = _leftD
   , _rightD = _upD
@@ -68,16 +73,19 @@ rotate90 (ByDirection{..}) = ByDirection
   , _leftupD = _leftdownD
   , _uprightD = _leftupD
   , _downrightD = _uprightD
-  , _leftdownD = _downrightD }
+  , _leftdownD = _downrightD }-}
+
+numSlopes :: Int
+numSlopes = 32
 
 -- | Computes the field of view in two dimensions.
 --
 -- Very expensive with the current algorithm. The benchmark says 10ms to
 -- compute the view for 100x100 completely open area (which is the most
 -- pathological case).
-computeFieldOfView :: (Monad m, Ord a)
+computeFieldOfView :: forall a m. Monad m
            => (a -> m ()) -- ^ I can see this square. May be called more than once.
-           -> (a -> Bool) -- ^ Can you see through this square?
+           -> (a -> m Bool) -- ^ Can you see through this square?
            -> ByDirection (a -> m (Maybe a))  -- ^ Functions that move to some direction. If you use portals, implement that logic in these functions. Return Nothing if this is the boundary of area.
            -> a   -- ^ Start from this square
            -> Int -- ^ How many steps you can go right (0 == the area is just one vertical column)
@@ -93,52 +101,86 @@ computeFieldOfView i_see see_through move_functions starting_point x_extent y_ex
   straight starting_point (move_functions^.upD) 0
   straight starting_point (move_functions^.downD) 0
 
-  -- shoot right
-  bresenhamsLineShooter move_functions x_extent y_extent
-  -- shoot left
-  bresenhamsLineShooter (flipX move_functions) x_extent y_extent
-  -- shoot down
-  bresenhamsLineShooter (rotate90 move_functions) y_extent x_extent
-  -- shoow up
-  bresenhamsLineShooter (rotate90 $ rotate90 $ rotate90 move_functions) y_extent x_extent
+  beamlosShooter move_functions x_extent y_extent
+  beamlosShooter (flipY move_functions) x_extent y_extent
+  beamlosShooter (flipX move_functions) x_extent y_extent
+  beamlosShooter (flipY $ flipX move_functions) x_extent y_extent
  where
-  -- Here's the idiot algorithm:
+  -- http://www.roguebasin.com/index.php?title=Isaac_s_fast_beamcasting_LOS
   --
-  -- Shoot a line to every point in the LOS area edges.
-  -- The 'i_see' function will be called for some spot if there exists is a
-  -- line that passes through it.
-  --
-  -- There's a lot of optimize here. Many squares are visited many times
-  -- (especially those close to center).
-  bresenhamsLineShooter mf x_extent y_extent =
-    void $ flip execStateT (starting_point, 0, 0) $
-      for_ [-y_extent..y_extent] $ \by -> when (by /= 0) $ do
-        bresenhamLine x_extent by $ \x y -> do
-          (previous_pos, previous_x, previous_y) <- get
-          new_pos <- lift $
-                     if | previous_x == x-1 && previous_y == y
-                         -> (mf^.rightD) previous_pos
-                        | previous_x == x-1 && previous_y == y-1
-                         -> (mf^.downrightD) previous_pos
-                        | previous_x == x && previous_y == y-1
-                         -> (mf^.downD) previous_pos
-                        | previous_x == x && previous_y == y+1
-                         -> (mf^.upD) previous_pos
-                        | previous_x == x-1 && previous_y == y+1
-                         -> (mf^.uprightD) previous_pos
-                        | previous_x == x && previous_y == y
-                         -> return $ Just previous_pos
-                        | otherwise -> error $ "computeLOS: I hit a place of code that should be dead code. Eep. Eek. " ++ show (x, y, previous_x, previous_y)
+  -- Suits the portal mechanism well because the algorithm is based on shooting
+  -- beams.
+  beamlosShooter :: ByDirection (a -> m (Maybe a)) -> Int -> Int -> m ()
+  beamlosShooter mf x_extent y_extent =
+    loop 1
+   where
+    loop slope | slope >= numSlopes = return ()
+    loop slope =
+      loop2 slope 0 (numSlopes-1) (Just starting_point) (Just starting_point) (V2 0 0) (V2 0 0) 1
+     where
+      loop2 :: Int -> Int -> Int -> Maybe a -> Maybe a -> V2 Int -> V2 Int -> Int -> m ()
+      loop2 _ mini maxi _ _ _ _ _ | mini > maxi = loop (slope+1)
+      loop2 v mini maxi previous_mini previous_maxi previous_mini_coords previous_maxi_coords u = do
+        let y   = v `div` numSlopes
+            x   = u - y
+            cor = numSlopes - (v `mod` numSlopes)
 
-          case new_pos of
-            Nothing -> return False
-            Just really_new_pos -> do
-              lift $ i_see really_new_pos
+            new_mini_coords = V2 x y
+            new_maxi_coords = V2 (x-1) (y+1)
 
-              put (really_new_pos, x, y)
-              return $ see_through really_new_pos
+        current_mini <- move previous_mini previous_mini_coords new_mini_coords
+        current_maxi <- move previous_maxi previous_maxi_coords new_maxi_coords
 
-        put (starting_point, 0, 0)
+        let within_bounds_mini = x <= x_extent && y <= y_extent
+            within_bounds_maxi = (x-1) <= x_extent && (y+1) <= y_extent
+
+        new_mini <- if mini < cor
+          then do do_i_see_it <- case current_mini of
+                       Just amini -> do i_see amini
+                                        see_through amini
+                       Nothing -> return False
+                  return $ if do_i_see_it && within_bounds_mini
+                    then mini
+                    else cor
+          else return mini
+
+        new_maxi <- if maxi > cor
+          then do do_i_see_it <- case current_maxi of
+                       Just amaxi -> do i_see amaxi
+                                        see_through amaxi
+                       Nothing -> return False
+                  return $ if do_i_see_it && within_bounds_maxi
+                    then maxi
+                    else cor
+          else return maxi
+
+        loop2 (v+slope)
+              new_mini
+              new_maxi
+              current_mini
+              current_maxi
+              new_mini_coords
+              new_maxi_coords
+              (u+1)
+
+      move Nothing _ _ = return Nothing
+      move (Just item) (V2 ox oy) (V2 nx ny) | ox == nx && oy == ny = return $ Just item
+      move (Just item) (V2 ox oy) (V2 nx ny) =
+       if | nx == ox
+           -> (if | ny == oy+1 -> (mf^.downD) item
+                  | ny == oy-1 -> (mf^.upD) item
+                  | otherwise -> error "beamlosShooter: impossible")
+          | ny == oy
+           -> (if | nx == ox+1 -> (mf^.rightD) item
+                  | nx == ox-1 -> (mf^.leftD) item
+                  | otherwise -> error "beamLosShooter: impossible")
+          | otherwise
+           -> (if | nx == ox+1 && ny == oy+1 -> (mf^.downrightD) item
+                  | nx == ox+1 && ny == oy-1 -> (mf^.uprightD) item
+                  | nx == ox-1 && ny == oy+1 -> (mf^.leftdownD) item
+                  | nx == ox-1 && ny == oy-1 -> (mf^.leftupD) item
+                  | otherwise -> error "beamLosShooter: impossible")
+
   straight pos move_function steps | steps > x_extent = return ()
                                    | otherwise = do
     next_pos <- move_function pos
@@ -146,7 +188,7 @@ computeFieldOfView i_see see_through move_functions starting_point x_extent y_ex
       Nothing -> return ()
       Just new_pos -> do
         i_see new_pos
-        let can_i_see_through = see_through new_pos
+        can_i_see_through <- see_through new_pos
         when can_i_see_through $ straight new_pos move_function (steps+1)
 {-# INLINE computeFieldOfView #-}
 

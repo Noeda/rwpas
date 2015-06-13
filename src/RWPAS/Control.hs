@@ -1,12 +1,14 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE RankNTypes #-}
 
 module RWPAS.Control
   ( World()
   , Command(..)
   , performCommand
   , singletonWorld
+  , levelById
   , currentActorLevelAndCoordinates )
   where
 
@@ -22,10 +24,8 @@ import           RWPAS.Direction
 import           RWPAS.Level
 
 data Command
-  = Move !Direction
+  = Move !Direction4
   deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
-
-type LevelID = Int
 
 data World = World
   { _levels       :: !(IntMap Level)
@@ -34,6 +34,9 @@ data World = World
   , _runningID    :: !Int }
   deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
 makeLenses ''World
+
+levelById :: LevelID -> Lens' World (Maybe Level)
+levelById lid = levels.at lid
 
 singletonWorld :: Level -> World
 singletonWorld initial_level = World
@@ -51,7 +54,12 @@ currentActorLevelAndCoordinates world =
 performCommand :: Command -> World -> World
 performCommand (Move dir) world = flip execState world $ do
   lvl <- fromJust <$> use (levels.at (world^.currentLevel))
-  case tryMoveActor (world^.currentActor) dir lvl of
-    Just new_lvl -> levels.at (world^.currentLevel) .= Just new_lvl
+  case tryMoveActor (world^.currentActor) dir (world^.currentLevel) lvl (\lid -> world^.levels.at lid) of
+    Just (new_lvl, maybe_more_levels) -> do
+      levels.at (world^.currentLevel) .= Just new_lvl
+      case maybe_more_levels of
+        Nothing -> return ()
+        Just (more_level_id, more_level) ->
+          levels.at more_level_id .= Just more_level
     _ -> return ()
 

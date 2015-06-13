@@ -43,6 +43,7 @@ benchmark              fov-calculation
   main-is:             Main.hs
   build-depends:       base
                       ,criterion >=1.1 && <2.0
+                      ,lens
                       ,linear
                       ,rwpas
                       ,transformers
