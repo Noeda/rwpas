@@ -32,6 +32,9 @@ import RWPAS.Control
 import RWPAS.Direction
 import RWPAS.Level
 import System.Console.ANSI
+import System.Console.GetOpt
+import System.Environment
+import System.Exit
 import System.IO
 import System.Posix.IO
 import System.Posix.Terminal
@@ -56,8 +59,39 @@ getWindowSize =
 
 type Offset = V2 Int
 
+data Option
+  = SetUsername String
+  | ShowHelp
+  deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
+
+options :: [OptDescr Option]
+options = [Option "u" ["username"] (ReqArg SetUsername "username") "set username"
+          ,Option "h?" ["help"] (NoArg ShowHelp) "show help"]
+
+showHelp :: IO ()
+showHelp = putStrLn $ usageInfo "rwpas" options
+
+handleArguments :: IO String
+handleArguments = do
+  args <- getArgs
+  username <- getEffectiveUserName
+  case getOpt Permute options args of
+    (opts, [], []) | ShowHelp `elem` opts
+      -> showHelp *> exitSuccess
+    (opts, [], []) -> return $ handleOpts opts username
+    (_, non_opts, errs) ->
+      error $ "Invalid arguments: " ++ show (non_opts, errs)
+ where
+  handleOpts [] username = username
+  handleOpts (ShowHelp:rest) username = handleOpts rest username
+  handleOpts (SetUsername username:rest) _ =
+    handleOpts rest username
+
 runAnsiTerminalRWPAS :: IO ()
 runAnsiTerminalRWPAS = do
+  username <- handleArguments
+  when (username == "") $ error "Username cannot be empty."
+
   hSetBuffering stdin NoBuffering
   ta <- getTerminalAttributes stdInput
   let new_ta = withoutMode ta EnableEcho
@@ -67,10 +101,8 @@ runAnsiTerminalRWPAS = do
 
     splashScreen
 
-    username <- getEffectiveUserName
     putStrLn $ "Welcome, " ++ username ++ "."
     putStrLn "Press space to start or q if you don't want to play after all."
-
     waitUntilStart
  where
   waitUntilStart = do
