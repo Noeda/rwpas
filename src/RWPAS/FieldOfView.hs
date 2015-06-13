@@ -76,7 +76,7 @@ rotate90 (ByDirection{..}) = ByDirection
   , _leftdownD = _downrightD }-}
 
 numSlopes :: Int
-numSlopes = 32
+numSlopes = 50
 
 -- | Computes the field of view in two dimensions.
 --
