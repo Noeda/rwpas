@@ -205,7 +205,7 @@ writeLevel offset base_coords level get_level cache = do
         setSGR [SetColor Foreground Dull (cell^.foregroundColor)
                ,SetColor Background Dull (cell^.backgroundColor)]
 
-  let (new_cache, changed_spots) = flip execState (cache, S.empty) $ do
+      (new_cache, changed_spots) = flip execState (cache, S.empty) $ do
         let modifier cell tcoords = modify $ \(old_cache, spots) ->
                                     case M.lookup tcoords old_cache of
                                       Just old_cell | old_cell /= cell ->
