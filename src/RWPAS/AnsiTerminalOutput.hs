@@ -3,6 +3,7 @@
 --
 
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE MultiWayIf #-}
@@ -20,7 +21,10 @@ import Control.Monad.IO.Class
 import Control.Monad.State.Strict
 import Data.Foldable
 import Data.Data
+import Data.Map.Strict ( Map )
 import qualified Data.Map.Strict as M
+import Data.Maybe
+import qualified Data.Set as S
 import Foreign.C.Types
 import Foreign.Marshal.Alloc
 import Foreign.Ptr
@@ -124,23 +128,39 @@ startGame :: IO ()
 startGame = do
   let initial_world = singletonWorld (portalOnRightSideLevel (V2 20 20) 2 3 0)
 
-  void $ flip execStateT initial_world $ forever $ do
-    world <- get
-    V2 tw th <- liftIO getWindowSize
+  setSGR [Reset]
+  clearScreen
 
-    let (level, actor) = currentActorLevelAndCoordinates world
+  V2 tw th <- liftIO getWindowSize
+  let initial_cache = newCache tw th
+
+  gameLoop initial_world initial_cache tw th
+ where
+  newCache w h = M.fromList [ (V2 x y, Square ' ' White Black) |
+                              x <- [0..w-1]
+                            , y <- [0..h-1] ]
+
+  gameLoop world cache last_tw last_th = do
+    V2 tw th <- getWindowSize
+
+    let actual_cache = if tw /= last_tw || th /= last_th
+                         then newCache tw th
+                         else cache
+
+        (level, actor) = currentActorLevelAndCoordinates world
         actor_pos = actor^.position
         offset = V2 ((actor_pos^._x) - (tw `div` 2))
                     ((actor_pos^._y) - (th `div` 2))
 
-    liftIO $ writeLevel offset
-                        actor_pos
-                        level
-                        (\lid -> world^.levelById lid)
+    new_cache <- writeLevel offset
+                            actor_pos
+                            level
+                            (\lid -> world^.levelById lid)
+                            actual_cache
 
-    cmd <- liftIO getNextCommand
-    modify $ performCommand cmd
- where
+    cmd <- getNextCommand
+    gameLoop (performCommand cmd world) new_cache tw th
+
   getNextCommand = do
     maybe_cmd <- charToCommand <$> getChar
     case maybe_cmd of
@@ -164,6 +184,8 @@ featureToCell Floor = Square '.' White Black
 featureToCell Wall = Square '#' White Black
 featureToCell Rock = Square ' ' White Black
 
+type ScreenCache = Map (V2 Int) Square
+
 -- | Writes a level on the screen, at given offset.
 --
 -- This overwrites the whole screen.
@@ -171,11 +193,11 @@ writeLevel :: Offset
            -> LevelCoordinates
            -> Level
            -> (LevelID -> Maybe Level)
-           -> IO ()
-writeLevel offset base_coords level get_level = do
+           -> ScreenCache
+           -> IO ScreenCache
+writeLevel offset base_coords level get_level cache = do
   -- TODO: don't so wastefully write to terminal, we could get by with much
   -- less.
-  clearScreen
   setSGR [Reset]
   V2 tw th <- getWindowSize
 
@@ -183,20 +205,36 @@ writeLevel offset base_coords level get_level = do
         setSGR [SetColor Foreground Dull (cell^.foregroundColor)
                ,SetColor Background Dull (cell^.backgroundColor)]
 
-  let see_map = flip execState M.empty $
-        levelFieldOfView base_coords level get_level $ \fcoords coords lvl ->
-          case actorByCoordinates fcoords lvl of
-            Nothing -> let feature = lvl^.terrainFeature fcoords
-                           cell = featureToCell feature
-                        in modify $ M.insert coords cell
-            Just aid -> case lvl^.actorById aid of
-              Nothing -> return ()
-              Just actor ->
-                let cell = appearanceToCell $ actor^.appearance
-                 in modify $ M.insert coords cell
+  let (new_cache, changed_spots) = flip execState (cache, S.empty) $ do
+        let modifier cell tcoords = modify $ \(old_cache, spots) ->
+                                    case M.lookup tcoords old_cache of
+                                      Just old_cell | old_cell /= cell ->
+                                        (M.insert tcoords cell old_cache
+                                        ,S.insert tcoords spots)
+                                      _ -> (old_cache, spots)
 
-  for_ (M.assocs see_map) $ \(coords, cell) -> do
-    let (V2 x y) = coords - offset
+        for_ [0..tw-1] $ \x ->
+          for_ [0..th-1] $ \y ->
+            let tcoords = V2 x y
+             in modifier (Square ' ' White Black) tcoords
+
+        levelFieldOfView base_coords level get_level $ \fcoords coords@(V2 cx cy) lvl -> do
+          let tcoords@(V2 x y) = coords - offset
+          when (x >= 0 && y >= 0 && x < tw && y < th) $
+            let put_cell cell = modifier cell tcoords
+             in case actorByCoordinates fcoords lvl of
+                  Nothing -> let feature = lvl^.terrainFeature fcoords
+                                 cell = featureToCell feature
+                              in put_cell cell
+                  Just aid -> case lvl^.actorById aid of
+                    Nothing -> return ()
+                    Just actor ->
+                      let cell = appearanceToCell $ actor^.appearance
+                       in put_cell cell
+
+  for_ changed_spots $ \coords -> do
+    let cell = fromMaybe (Square ' ' White Black) $ M.lookup coords new_cache
+        (V2 x y) = coords
     when (x >= 0 && y >= 0 && x < tw && y < th) $ do
       setCursorPosition y x
       set_cell_attributes cell
@@ -205,4 +243,5 @@ writeLevel offset base_coords level get_level = do
   hFlush stdout
 
   setCursorPosition 0 0
+  return new_cache
 
