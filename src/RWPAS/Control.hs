@@ -33,7 +33,7 @@ import           RWPAS.Level
 import           RWPAS.TwoDimensionalVector
 
 data Command
-  = Move !Direction4
+  = Move !Direction8
   deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
 
 type FieldOfView = Vector2DG (Word8, Word8)
@@ -95,14 +95,15 @@ computeFieldOfView world =
                        (actor^.position)
                        (fromJust $ world^.levels.at (world^.currentLevel))
                        (world^.currentLevel)
-                       (\lid -> world^.levels.at lid) $ \coords fcoords@(V2 x y) lvl level_id -> do
+                       (\lid -> world^.levels.at lid) $ \coords (V2 x y) lvl level_id -> do
         let ox = x + 25 - actor^.position._x
             oy = y + 25 - actor^.position._y
             tfeature = terrainFeature coords lvl
             terrain_value = 1 + fromIntegral (fromEnum tfeature)
-            actor_value = case actorByCoordinates coords lvl of
-                            Nothing -> 0
-                            Just ac -> 1 + fromIntegral (fromEnum $ actor^.appearance)
+            actor_value = fromMaybe 0 $ do
+                            aid <- actorByCoordinates coords lvl
+                            ac <- lvl^.actorById aid
+                            return $ 1 + fromIntegral (fromEnum $ ac^.appearance)
 
         modify $ \old -> (coords, level_id, tfeature):old
         lift $ writeToMutable fov ox oy (actor_value, terrain_value)
@@ -113,7 +114,7 @@ computeFieldOfView world =
 
 singletonWorld :: Level -> World
 singletonWorld initial_level = computeFieldOfView World
-  { _levels       = IM.singleton 0 (insertActor 1 (sentinelActor & position .~ V2 1 1) initial_level)
+  { _levels       = IM.singleton 0 (insertActor 1 (sentinelActor & position .~ V2 250 250) initial_level)
   , _currentLevel = 0
   , _currentActor = 1
   , _currentFieldOfView = generate 51 51 $ \_ _ -> (0, 0)

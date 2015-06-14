@@ -34,6 +34,7 @@ import Linear.V2
 import RWPAS.Actor
 import RWPAS.Control
 import RWPAS.Direction
+import RWPAS.ForestArena
 import RWPAS.Level
 import System.Console.ANSI
 import System.Console.GetOpt
@@ -43,12 +44,14 @@ import System.IO
 import System.Posix.IO
 import System.Posix.Terminal
 import System.Posix.User
+import System.Random.MWC
 
 foreign import ccall get_window_size :: Ptr CInt -> Ptr CInt -> IO ()
 
 data Square = Square
   { _character :: !Char
   , _foregroundColor :: !Color
+  , _boldForeground :: !Bool
   , _backgroundColor :: !Color }
   deriving ( Eq, Ord, Show, Read, Typeable, Generic )
 makeLenses ''Square
@@ -124,7 +127,8 @@ splashScreen = do
 
 startGame :: IO ()
 startGame = do
-  let initial_world = singletonWorld (portalOnRightSideLevel (V2 23 50) 2 3 0)
+  rng <- createSystemRandom
+  initial_world <- singletonWorld <$> newForestArena rng
 
   setSGR [Reset]
   clearScreen
@@ -134,7 +138,7 @@ startGame = do
 
   gameLoop initial_world initial_cache tw th
  where
-  newCache w h = M.fromList [ (V2 x y, Square ' ' White Black) |
+  newCache w h = M.fromList [ (V2 x y, Square ' ' White False Black) |
                               x <- [0..w-1]
                             , y <- [0..h-1] ]
 
@@ -158,20 +162,30 @@ startGame = do
 
 
 charToCommand :: Char -> Maybe Command
-charToCommand 'h' = Just (Move DLeft)
-charToCommand 'k' = Just (Move DUp)
-charToCommand 'j' = Just (Move DDown)
-charToCommand 'l' = Just (Move DRight)
+charToCommand 'h' = Just (Move D8Left)
+charToCommand 'k' = Just (Move D8Up)
+charToCommand 'j' = Just (Move D8Down)
+charToCommand 'l' = Just (Move D8Right)
+charToCommand 'y' = Just (Move D8UpLeft)
+charToCommand 'u' = Just (Move D8UpRight)
+charToCommand 'b' = Just (Move D8DownLeft)
+charToCommand 'n' = Just (Move D8DownRight)
 charToCommand _ = Nothing
 
 appearanceToCell :: ActorAppearance -> Square
-appearanceToCell PlayerCharacter = Square '@' White Black
+appearanceToCell PlayerCharacter = Square '@' White True Black
 
 -- | Mapping from level features to characters to show on screen.
 featureToCell :: TerrainFeature -> Square
-featureToCell Floor = Square '.' White Black
-featureToCell Wall = Square '#' White Black
-featureToCell Rock = Square ' ' White Black
+featureToCell Floor = Square '.' White False Black
+featureToCell Wall = Square '#' White False Black
+featureToCell Rock = Square ' ' White False Black
+featureToCell Tree1 = Square 'T' Green True Black
+featureToCell Tree2 = Square 'T' Green False Black
+featureToCell Grass = Square '.' Green True Black
+featureToCell Planks = Square '#' Yellow True Black
+featureToCell PlanksFloor = Square '.' Yellow True Black
+featureToCell Dirt = Square '.' Yellow False Black
 
 type ScreenCache = Map (V2 Int) Square
 
@@ -188,7 +202,9 @@ writeLevel world cache = do
   V2 tw th <- getWindowSize
 
   let set_cell_attributes cell =
-        setSGR [SetColor Foreground Dull (cell^.foregroundColor)
+        setSGR [SetColor Foreground (if cell^.boldForeground
+                                       then Vivid
+                                       else Dull) (cell^.foregroundColor)
                ,SetColor Background Dull (cell^.backgroundColor)]
 
       (new_cache, changed_spots) = flip execState (cache, S.empty) $ do
@@ -202,7 +218,7 @@ writeLevel world cache = do
         for_ [0..th-1] $ \y ->
           for_ [0..tw-1] $ \x ->
             let tcoords = V2 x y
-             in modifier (Square ' ' White Black) tcoords
+             in modifier (Square ' ' White False Black) tcoords
 
         let (w, h, access) = getCurrentFieldOfView world
             (lvl, _, actor, actor_id) = currentActorLevelAndCoordinates world
@@ -221,11 +237,11 @@ writeLevel world cache = do
               _ -> case getMemoryAt actor_id lvl lp of
                 Nothing -> return ()
                 Just v  ->
-                  modifier (let Square ch _ _ = featureToCell v
-                             in Square ch Red Black) op
+                  modifier (let Square ch _ _ _ = featureToCell v
+                             in Square ch Black True Black) op
 
   for_ changed_spots $ \coords -> do
-    let cell = fromMaybe (Square ' ' White Black) $ M.lookup coords new_cache
+    let cell = fromMaybe (Square ' ' White False Black) $ M.lookup coords new_cache
         (V2 x y) = coords
     when (x >= 0 && y >= 0 && x < tw && y < th) $ do
       setCursorPosition y x

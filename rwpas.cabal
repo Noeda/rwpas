@@ -16,7 +16,9 @@ library
                        RWPAS.Control
                        RWPAS.Direction
                        RWPAS.FieldOfView
+                       RWPAS.ForestArena
                        RWPAS.Level
+                       RWPAS.Rectangle
                        RWPAS.TwoDimensionalVector
   c-sources:           cbits/windowsize.c
   build-depends:       ansi-terminal >=0.6.2.1  && <1.0

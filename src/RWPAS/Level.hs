@@ -11,6 +11,8 @@ module RWPAS.Level
   , LevelID
   , TerrainFeature(..)
   , addPortal
+  , generateLevel
+  , generateLevelM
   , insertActor
   , portalOnRightSideLevel
   , emptyLevel
@@ -76,6 +78,12 @@ type PortalID = Int
 data TerrainFeature
   = Floor
   | Wall
+  | Planks
+  | PlanksFloor
+  | Tree1
+  | Tree2
+  | Dirt
+  | Grass
   | Rock   -- ^ Same as `Wall` but completely black.
   deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic, Enum )
 
@@ -128,6 +136,20 @@ addPortal portal portal_id = execState $ do
      in portalKeys.at pos %= Just . \case
           Nothing -> IS.singleton portal_id
           Just set -> IS.insert portal_id set
+
+-- | Generate a level with a generator function.
+generateLevel :: Int -> Int -> (Int -> Int -> TerrainFeature) -> Level
+generateLevel w h generator = emptyLevel
+  { _terrain = generate w h $ \x y -> fromIntegral $ fromEnum $ generator x y }
+
+generateLevelM :: Monad m
+               => Int
+               -> Int
+               -> (Int -> Int -> m TerrainFeature)
+               -> m Level
+generateLevelM w h generator = do
+  generated <- generateM w h $ \x y -> fromIntegral . fromEnum <$> generator x y
+  return emptyLevel { _terrain = generated }
 
 -- | A completely empty level.
 emptyLevel :: Level
@@ -201,24 +223,32 @@ actorByCoordinates :: LevelCoordinates -> Level -> Maybe ActorID
 actorByCoordinates coords level = level^.actorKeys.at coords
 
 impassable :: TerrainFeature -> Bool
-impassable Floor = False
+impassable Floor  = False
+impassable Dirt   = False
+impassable Grass = False
+impassable PlanksFloor = False
 impassable _ = True
 
-seeThrough :: TerrainFeature -> Bool
-seeThrough Floor = True
-seeThrough _ = False
+seeThrough :: TerrainFeature -> Int
+seeThrough Floor = 0
+seeThrough Dirt  = 0
+seeThrough Grass = 0
+seeThrough PlanksFloor = 0
+seeThrough Tree1 = 1
+seeThrough Tree2 = 1
+seeThrough _ = 10000
 
 insertActor :: ActorID -> Actor -> Level -> Level
 insertActor aid actor =
   (actors.at aid .~ Just actor) .
   (actorKeys.at (actor^.position) .~ Just aid)
 
-tryMoveActor :: ActorID -> Direction4 -> LevelID -> Level -> (LevelID -> Maybe Level) -> Maybe (Level, Maybe (LevelID, Level))
+tryMoveActor :: ActorID -> Direction8 -> LevelID -> Level -> (LevelID -> Maybe Level) -> Maybe (Level, Maybe (LevelID, Level))
 tryMoveActor aid dir source_level_id level get_level = do
   actor <- IM.lookup aid (level^.actors)
   let actor_pos = actor^.position
 
-  case step (direction4To8 dir) actor_pos level of
+  case step dir actor_pos level of
     SameLevel new_actor_pos ->
       if impassable (terrainFeature new_actor_pos level)
         then Nothing
@@ -340,6 +370,7 @@ levelFieldOfView x_extent y_extent coords level level_id get_level i_see =
                , _uprightD   = goThrough D8UpRight
                , _downrightD = goThrough D8DownRight }
                (AugmentedCoords coords coords)
+               2
                x_extent
                y_extent
  where

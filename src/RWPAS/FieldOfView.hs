@@ -85,21 +85,22 @@ numSlopes = 50
 -- pathological case).
 computeFieldOfView :: forall a m. Monad m
            => (a -> m ()) -- ^ I can see this square. May be called more than once.
-           -> (a -> m Bool) -- ^ Can you see through this square?
+           -> (a -> m Int) -- ^ How much this square obstruct view? 0 = does not obstruct at all.
            -> ByDirection (a -> m (Maybe a))  -- ^ Functions that move to some direction. If you use portals, implement that logic in these functions. Return Nothing if this is the boundary of area.
            -> a   -- ^ Start from this square
+           -> Int -- ^ Obstruction points. Deducted by obstruction function.
            -> Int -- ^ How many steps you can go right (0 == the area is just one vertical column)
            -> Int -- ^ How many steps you can go up.
            -> m ()
-computeFieldOfView i_see see_through move_functions starting_point x_extent y_extent = do
+computeFieldOfView i_see see_through move_functions starting_point obstruction_points x_extent y_extent = do
   -- We can always see the square we are on
   i_see starting_point
 
   -- cardinal directions
-  straight starting_point (move_functions^.leftD) 0
-  straight starting_point (move_functions^.rightD) 0
-  straight starting_point (move_functions^.upD) 0
-  straight starting_point (move_functions^.downD) 0
+  straight starting_point (move_functions^.leftD) 0 obstruction_points
+  straight starting_point (move_functions^.rightD) 0 obstruction_points
+  straight starting_point (move_functions^.upD) 0 obstruction_points
+  straight starting_point (move_functions^.downD) 0 obstruction_points
 
   beamlosShooter move_functions x_extent y_extent
   beamlosShooter (flipY move_functions) x_extent y_extent
@@ -116,11 +117,11 @@ computeFieldOfView i_see see_through move_functions starting_point x_extent y_ex
    where
     loop slope | slope >= numSlopes = return ()
     loop slope =
-      loop2 slope 0 (numSlopes-1) (Just starting_point) (Just starting_point) (V2 0 0) (V2 0 0) 1
+      loop2 slope 0 (numSlopes-1) (Just starting_point) (Just starting_point) (V2 0 0) (V2 0 0) obstruction_points obstruction_points 1
      where
-      loop2 :: Int -> Int -> Int -> Maybe a -> Maybe a -> V2 Int -> V2 Int -> Int -> m ()
-      loop2 _ mini maxi _ _ _ _ _ | mini > maxi = loop (slope+1)
-      loop2 v mini maxi previous_mini previous_maxi previous_mini_coords previous_maxi_coords u = do
+      loop2 :: Int -> Int -> Int -> Maybe a -> Maybe a -> V2 Int -> V2 Int -> Int -> Int -> Int -> m ()
+      loop2 _ mini maxi _ _ _ _ _ _ _ | mini > maxi = loop (slope+1)
+      loop2 v mini maxi previous_mini previous_maxi previous_mini_coords previous_maxi_coords obs_mini obs_maxi u = do
         let y   = v `div` numSlopes
             x   = u - y
             cor = numSlopes - (v `mod` numSlopes)
@@ -134,25 +135,25 @@ computeFieldOfView i_see see_through move_functions starting_point x_extent y_ex
         let within_bounds_mini = x <= x_extent && y <= y_extent
             within_bounds_maxi = (x-1) <= x_extent && (y+1) <= y_extent
 
-        new_mini <- if mini < cor
+        (new_mini, new_obs_mini) <- if mini < cor
           then do do_i_see_it <- case current_mini of
                        Just amini -> do i_see amini
                                         see_through amini
-                       Nothing -> return False
-                  return $ if do_i_see_it && within_bounds_mini
-                    then mini
-                    else cor
-          else return mini
+                       Nothing -> return 10000
+                  return $ if obs_mini - do_i_see_it > 0 && within_bounds_mini
+                    then (mini, obs_mini - do_i_see_it)
+                    else (cor, obs_mini - do_i_see_it)
+          else return (mini, obs_mini)
 
-        new_maxi <- if maxi > cor
+        (new_maxi, new_obs_maxi) <- if maxi > cor
           then do do_i_see_it <- case current_maxi of
                        Just amaxi -> do i_see amaxi
                                         see_through amaxi
-                       Nothing -> return False
-                  return $ if do_i_see_it && within_bounds_maxi
-                    then maxi
-                    else cor
-          else return maxi
+                       Nothing -> return 10000
+                  return $ if obs_maxi - do_i_see_it > 0 && within_bounds_maxi
+                    then (maxi, obs_maxi - do_i_see_it)
+                    else (cor, obs_maxi - do_i_see_it)
+          else return (maxi, obs_maxi)
 
         loop2 (v+slope)
               new_mini
@@ -161,6 +162,8 @@ computeFieldOfView i_see see_through move_functions starting_point x_extent y_ex
               current_maxi
               new_mini_coords
               new_maxi_coords
+              new_obs_mini
+              new_obs_maxi
               (u+1)
 
       move Nothing _ _ = return Nothing
@@ -181,15 +184,16 @@ computeFieldOfView i_see see_through move_functions starting_point x_extent y_ex
                   | nx == ox-1 && ny == oy-1 -> (mf^.leftupD) item
                   | otherwise -> error "beamLosShooter: impossible")
 
-  straight pos move_function steps | steps > x_extent = return ()
-                                   | otherwise = do
+  straight pos move_function steps obs | steps > x_extent = return ()
+                                       | obs <= 0 = return ()
+                                       | otherwise = do
     next_pos <- move_function pos
     case next_pos of
       Nothing -> return ()
       Just new_pos -> do
         i_see new_pos
         can_i_see_through <- see_through new_pos
-        when can_i_see_through $ straight new_pos move_function (steps+1)
+        straight new_pos move_function (steps+1) (obs-can_i_see_through)
 {-# INLINE computeFieldOfView #-}
 
 -- | Shoots a bresenham's line from origin to some place. Calls a function for

@@ -8,6 +8,7 @@ module RWPAS.TwoDimensionalVector
   , Vector2DGMut()
   , getAt
   , generate
+  , generateM
   , viewWidth
   , viewHeight
   , newMutable
@@ -86,4 +87,16 @@ generate w h generator = Vector2DG
     let x = o `mod` w
         y = o `div` w
      in generator x y
+
+generateM :: (Monad m, Unbox a) => Int -> Int -> (Int -> Int -> m a) -> m (Vector2DG a)
+generateM w h generator = do
+  generated_vec <- V.generateM (w*h) $ \o ->
+    let x = o `mod` w
+        y = o `div` w
+     in generator x y
+
+  return Vector2DG
+    { _vec = generated_vec
+    , _width = w
+    , _height = h }
 
