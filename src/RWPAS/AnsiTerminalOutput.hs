@@ -61,8 +61,6 @@ getWindowSize =
     V2 <$> (fromIntegral <$> peek w_ptr) <*>
            (fromIntegral <$> peek h_ptr)
 
-type Offset = V2 Int
-
 data Option
   = SetUsername String
   | ShowHelp
@@ -126,7 +124,7 @@ splashScreen = do
 
 startGame :: IO ()
 startGame = do
-  let initial_world = singletonWorld (portalOnRightSideLevel (V2 20 20) 2 3 0)
+  let initial_world = singletonWorld (portalOnRightSideLevel (V2 23 50) 2 3 0)
 
   setSGR [Reset]
   clearScreen
@@ -143,20 +141,11 @@ startGame = do
   gameLoop world cache last_tw last_th = do
     V2 tw th <- getWindowSize
 
-    let actual_cache = if tw /= last_tw || th /= last_th
-                         then newCache tw th
-                         else cache
+    actual_cache <- if tw /= last_tw || th /= last_th
+                      then clearScreen *> return (newCache tw th)
+                      else return cache
 
-        (level, actor) = currentActorLevelAndCoordinates world
-        actor_pos = actor^.position
-        offset = V2 ((actor_pos^._x) - (tw `div` 2))
-                    ((actor_pos^._y) - (th `div` 2))
-
-    new_cache <- writeLevel offset
-                            actor_pos
-                            level
-                            (\lid -> world^.levelById lid)
-                            actual_cache
+    new_cache <- writeLevel world actual_cache
 
     cmd <- getNextCommand
     gameLoop (performCommand cmd world) new_cache tw th
@@ -189,13 +178,10 @@ type ScreenCache = Map (V2 Int) Square
 -- | Writes a level on the screen, at given offset.
 --
 -- This overwrites the whole screen.
-writeLevel :: Offset
-           -> LevelCoordinates
-           -> Level
-           -> (LevelID -> Maybe Level)
+writeLevel :: World
            -> ScreenCache
            -> IO ScreenCache
-writeLevel offset base_coords level get_level cache = do
+writeLevel world cache = do
   -- TODO: don't so wastefully write to terminal, we could get by with much
   -- less.
   setSGR [Reset]
@@ -213,24 +199,30 @@ writeLevel offset base_coords level get_level cache = do
                                         ,S.insert tcoords spots)
                                       _ -> (old_cache, spots)
 
-        for_ [0..tw-1] $ \x ->
-          for_ [0..th-1] $ \y ->
+        for_ [0..th-1] $ \y ->
+          for_ [0..tw-1] $ \x ->
             let tcoords = V2 x y
              in modifier (Square ' ' White Black) tcoords
 
-        levelFieldOfView base_coords level get_level $ \fcoords coords lvl -> do
-          let tcoords@(V2 x y) = coords - offset
-          when (x >= 0 && y >= 0 && x < tw && y < th) $
-            let put_cell cell = modifier cell tcoords
-             in case actorByCoordinates fcoords lvl of
-                  Nothing -> let feature = terrainFeature fcoords lvl
-                                 cell = featureToCell feature
-                              in put_cell cell
-                  Just aid -> case lvl^.actorById aid of
-                    Nothing -> return ()
-                    Just actor ->
-                      let cell = appearanceToCell $ actor^.appearance
-                       in put_cell cell
+        let (w, h, access) = getCurrentFieldOfView world
+            (lvl, _, actor, actor_id) = currentActorLevelAndCoordinates world
+
+        for_ [0..h-1] $ \y ->
+          for_ [0..w-1] $ \x -> do
+            let ox = x + tw `div` 2 - (w `div` 2)
+                oy = y + th `div` 2 - (h `div` 2)
+                op = V2 ox oy
+                lp = V2 (actor^.position._x + x - (w `div` 2))
+                        (actor^.position._y + y - (h `div` 2))
+
+            case access x y of
+              (Just ap, _) -> modifier (appearanceToCell ap) op
+              (_, Just t)  -> modifier (featureToCell t) op
+              _ -> case getMemoryAt actor_id lvl lp of
+                Nothing -> return ()
+                Just v  ->
+                  modifier (let Square ch _ _ = featureToCell v
+                             in Square ch Red Black) op
 
   for_ changed_spots $ \coords -> do
     let cell = fromMaybe (Square ' ' White Black) $ M.lookup coords new_cache

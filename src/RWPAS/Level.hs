@@ -4,6 +4,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE MultiWayIf #-}
 
 module RWPAS.Level
   ( Level()
@@ -18,6 +19,8 @@ module RWPAS.Level
   , actors
   , actorById
   , actorByCoordinates
+  , updateActorMemories
+  , getMemoryAt
   , tryMoveActor
   , Size
   , LevelCoordinates
@@ -33,6 +36,7 @@ import qualified Data.IntSet as IS
 import           Data.IntMap ( IntMap )
 import qualified Data.IntMap as IM
 import           Data.Map.Strict ( Map )
+import qualified Data.Map.Strict as M
 import           GHC.Generics
 import           Linear.V2
 import           RWPAS.Actor
@@ -45,7 +49,8 @@ data Level = Level
   , _portals       :: !(IntMap Portal)
   , _portalKeys    :: !(Map LevelCoordinates IntSet)
   , _actorKeys     :: !(Map LevelCoordinates ActorID)
-  , _actors        :: !(IntMap Actor) }
+  , _actors        :: !(IntMap Actor)
+  , _actorMemories :: !(Map ActorID (Map LevelCoordinates TerrainFeature)) }
   deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
 
 -- | Coordinates relative to some `Level`.
@@ -81,6 +86,11 @@ makeLenses ''Portal
 -- | If there's no feature at some coordinate, what we should assume it is?
 defaultTerrainFeature :: TerrainFeature
 defaultTerrainFeature = Rock
+
+getMemoryAt :: ActorID -> Level -> LevelCoordinates -> Maybe TerrainFeature
+getMemoryAt aid level coords = do
+  memory <- level^.actorMemories.at aid
+  memory^.at coords
 
 {-
 
@@ -122,10 +132,17 @@ addPortal portal portal_id = execState $ do
 -- | A completely empty level.
 emptyLevel :: Level
 emptyLevel = Level { _terrain    = generate 1 1 $ \_ _ -> fromIntegral $ fromEnum defaultTerrainFeature
-                   , _actors     = mempty
-                   , _actorKeys  = mempty
-                   , _portals    = mempty
-                   , _portalKeys = mempty }
+                   , _actors        = mempty
+                   , _actorMemories = mempty
+                   , _actorKeys     = mempty
+                   , _portals       = mempty
+                   , _portalKeys    = mempty }
+
+updateActorMemories :: ActorID -> M.Map LevelCoordinates TerrainFeature -> Level -> Level
+updateActorMemories aid memories levels =
+  case levels^.actorMemories.at aid of
+    Nothing -> levels & actorMemories.at aid .~ Just memories
+    Just m  -> levels & actorMemories.at aid .~ Just (M.union memories m)
 
 -- | Same as `roomLevel` but adds a portal to the right side of the room.
 --
@@ -156,16 +173,19 @@ portalOnRightSideLevel sz@(V2 w h) pid pid2 lid =
 -- sized according to the given coordinates, with (1, 1) being the top-left
 -- corner of the room and (0, 0) is top-left wall.
 roomLevel :: Size -> Level
-roomLevel (V2 w h) = Level { _terrain    = makeOneRoom w h
-                           , _actors     = mempty
-                           , _actorKeys  = mempty
-                           , _portals    = mempty
-                           , _portalKeys = mempty }
+roomLevel (V2 w h) = Level { _terrain       = makeOneRoom w h
+                           , _actors        = mempty
+                           , _actorKeys     = mempty
+                           , _actorMemories = mempty
+                           , _portals       = mempty
+                           , _portalKeys    = mempty }
  where
   makeOneRoom w h = generate (w+1) (h+1) $ \x y ->
-    if x == 0 || y == 0 || x == w || y == h
-      then fromIntegral $ fromEnum Wall
-      else fromIntegral $ fromEnum Floor
+    if | x == 0 || y == 0 || x == w || y == h
+         -> fromIntegral $ fromEnum Wall
+       | x == w `div` 2 && y > 5 && y < h-6
+         -> fromIntegral $ fromEnum Wall
+       | otherwise -> fromIntegral $ fromEnum Floor
 
 -- | Lens to a terrain feature at some location.
 terrainFeature :: LevelCoordinates -> Level -> TerrainFeature
@@ -293,19 +313,22 @@ step dir coords@(V2 x y) level =
 data AugmentedCoords = AugmentedCoords !LevelCoordinates !(V2 Int)
 
 levelFieldOfView :: Monad m
-                 => LevelCoordinates
+                 => Int
+                 -> Int
+                 -> LevelCoordinates
                  -> Level
+                 -> LevelID
                  -> (LevelID -> Maybe Level)
-                 -> (LevelCoordinates -> V2 Int -> Level -> m ())
+                 -> (LevelCoordinates -> V2 Int -> Level -> LevelID -> m ())
                  -> m ()
-levelFieldOfView coords level get_level i_see =
-  void $ flip execStateT level $
+levelFieldOfView x_extent y_extent coords level level_id get_level i_see =
+  void $ flip execStateT (level, level_id) $
     computeFieldOfView
                (\(AugmentedCoords coords offset_coords) -> do
-                  lvl <- get
-                  lift $ i_see coords offset_coords lvl)
+                  (lvl, lvl_id) <- get
+                  lift $ i_see coords offset_coords lvl lvl_id)
                (\(AugmentedCoords coords _) -> do
-                  lvl <- get
+                  (lvl, _) <- get
                   return $ seeThrough (terrainFeature coords lvl))
                ByDirection
                { _leftD      = goThrough D8Left
@@ -317,8 +340,8 @@ levelFieldOfView coords level get_level i_see =
                , _uprightD   = goThrough D8UpRight
                , _downrightD = goThrough D8DownRight }
                (AugmentedCoords coords coords)
-               50
-               50
+               x_extent
+               y_extent
  where
   goThrough dir8 (AugmentedCoords coords offset_coords) = do
     result <- goThrough' dir8 coords
@@ -329,14 +352,14 @@ levelFieldOfView coords level get_level i_see =
          in return $ Just $ AugmentedCoords ok new_offset_coords
 
   goThrough' dir8 coords = do
-    lvl <- get
+    (lvl, _) <- get
     case step dir8 coords lvl of
       SameLevel new_coords -> return $ Just new_coords
       EnterLevel new_level_id new_coords ->
         case get_level new_level_id of
           Nothing -> return Nothing
           Just new_level -> do
-            put new_level
+            put (new_level, new_level_id)
             return $ Just new_coords
 {-# INLINE levelFieldOfView #-}
 
