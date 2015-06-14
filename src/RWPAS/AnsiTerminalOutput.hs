@@ -171,6 +171,14 @@ charToCommand 'y' = Just (Move D8UpLeft)
 charToCommand 'u' = Just (Move D8UpRight)
 charToCommand 'b' = Just (Move D8DownLeft)
 charToCommand 'n' = Just (Move D8DownRight)
+charToCommand '4' = Just (Move D8Left)
+charToCommand '8' = Just (Move D8Up)
+charToCommand '2' = Just (Move D8Down)
+charToCommand '6' = Just (Move D8Right)
+charToCommand '7' = Just (Move D8UpLeft)
+charToCommand '9' = Just (Move D8UpRight)
+charToCommand '1' = Just (Move D8DownLeft)
+charToCommand '3' = Just (Move D8DownRight)
 charToCommand _ = Nothing
 
 appearanceToCell :: ActorAppearance -> Square
