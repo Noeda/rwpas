@@ -25,6 +25,7 @@ import Data.Map.Strict ( Map )
 import qualified Data.Map.Strict as M
 import Data.Maybe
 import qualified Data.Set as S
+import qualified Data.Text as T
 import Foreign.C.Types
 import Foreign.Marshal.Alloc
 import Foreign.Ptr
@@ -201,7 +202,10 @@ writeLevel world cache = do
   setSGR [Reset]
   V2 tw th <- getWindowSize
 
-  let set_cell_attributes cell =
+  let (lvl, _, actor, actor_id) = currentActorLevelAndCoordinates world
+      level_title = lvl^.levelName
+
+      set_cell_attributes cell =
         setSGR [SetColor Foreground (if cell^.boldForeground
                                        then Vivid
                                        else Dull) (cell^.foregroundColor)
@@ -221,7 +225,6 @@ writeLevel world cache = do
              in modifier (Square ' ' White False Black) tcoords
 
         let (w, h, access) = getCurrentFieldOfView world
-            (lvl, _, actor, actor_id) = currentActorLevelAndCoordinates world
 
         for_ [0..h-1] $ \y ->
           for_ [0..w-1] $ \x -> do
@@ -239,6 +242,9 @@ writeLevel world cache = do
                 Just v  ->
                   modifier (let Square ch _ _ _ = featureToCell v
                              in Square ch Black True Black) op
+
+        for_ (zip [0..] $ T.unpack level_title) $ \(x, ch) ->
+          modifier (Square ch White True Black) (V2 x 0)
 
   for_ changed_spots $ \coords -> do
     let cell = fromMaybe (Square ' ' White False Black) $ M.lookup coords new_cache

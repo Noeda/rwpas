@@ -1,5 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 
 module RWPAS.ForestArena
@@ -20,7 +21,7 @@ import System.Random.MWC
 newForestArena :: forall m. PrimMonad m => Gen (PrimState m) -> m Level
 newForestArena rng = do
   houses <- placeHouse 100 S.empty rng
-  generateLevelM 500 500 $ \x y -> do
+  generateLevelM "Alma's Village" 500 500 $ \x y -> do
       -- distance from center
     let dist2 = sqrt $ fromIntegral $ (250-x)*(250-x) + (250-y)*(250-y) :: Double
       -- probability that this place should be empty

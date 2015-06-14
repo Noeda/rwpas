@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -10,6 +11,7 @@ module RWPAS.Level
   ( Level()
   , LevelID
   , TerrainFeature(..)
+  , levelName
   , addPortal
   , generateLevel
   , generateLevelM
@@ -39,6 +41,7 @@ import           Data.IntMap ( IntMap )
 import qualified Data.IntMap as IM
 import           Data.Map.Strict ( Map )
 import qualified Data.Map.Strict as M
+import           Data.Text ( Text )
 import           GHC.Generics
 import           Linear.V2
 import           RWPAS.Actor
@@ -52,7 +55,8 @@ data Level = Level
   , _portalKeys    :: !(Map LevelCoordinates IntSet)
   , _actorKeys     :: !(Map LevelCoordinates ActorID)
   , _actors        :: !(IntMap Actor)
-  , _actorMemories :: !(Map ActorID (Map LevelCoordinates TerrainFeature)) }
+  , _actorMemories :: !(Map ActorID (Map LevelCoordinates TerrainFeature))
+  , _levelName     :: !Text }
   deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
 
 -- | Coordinates relative to some `Level`.
@@ -138,27 +142,29 @@ addPortal portal portal_id = execState $ do
           Just set -> IS.insert portal_id set
 
 -- | Generate a level with a generator function.
-generateLevel :: Int -> Int -> (Int -> Int -> TerrainFeature) -> Level
-generateLevel w h generator = emptyLevel
+generateLevel :: Text -> Int -> Int -> (Int -> Int -> TerrainFeature) -> Level
+generateLevel name w h generator = (emptyLevel name)
   { _terrain = generate w h $ \x y -> fromIntegral $ fromEnum $ generator x y }
 
 generateLevelM :: Monad m
-               => Int
+               => Text
+               -> Int
                -> Int
                -> (Int -> Int -> m TerrainFeature)
                -> m Level
-generateLevelM w h generator = do
+generateLevelM name w h generator = do
   generated <- generateM w h $ \x y -> fromIntegral . fromEnum <$> generator x y
-  return emptyLevel { _terrain = generated }
+  return (emptyLevel name) { _terrain = generated }
 
 -- | A completely empty level.
-emptyLevel :: Level
-emptyLevel = Level { _terrain    = generate 1 1 $ \_ _ -> fromIntegral $ fromEnum defaultTerrainFeature
+emptyLevel :: Text -> Level
+emptyLevel name = Level { _terrain    = generate 1 1 $ \_ _ -> fromIntegral $ fromEnum defaultTerrainFeature
                    , _actors        = mempty
                    , _actorMemories = mempty
                    , _actorKeys     = mempty
                    , _portals       = mempty
-                   , _portalKeys    = mempty }
+                   , _portalKeys    = mempty
+                   , _levelName     = name }
 
 updateActorMemories :: ActorID -> M.Map LevelCoordinates TerrainFeature -> Level -> Level
 updateActorMemories aid memories levels =
@@ -200,7 +206,8 @@ roomLevel (V2 w h) = Level { _terrain       = makeOneRoom w h
                            , _actorKeys     = mempty
                            , _actorMemories = mempty
                            , _portals       = mempty
-                           , _portalKeys    = mempty }
+                           , _portalKeys    = mempty
+                           , _levelName     = "Rectangular Room" }
  where
   makeOneRoom w h = generate (w+1) (h+1) $ \x y ->
     if | x == 0 || y == 0 || x == w || y == h

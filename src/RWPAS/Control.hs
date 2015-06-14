@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
@@ -122,7 +123,7 @@ singletonWorld initial_level = computeFieldOfView World
 
 currentActorLevelAndCoordinates :: World -> (Level, LevelID, Actor, ActorID)
 currentActorLevelAndCoordinates world =
-  let level = fromMaybe emptyLevel (world^.levels.at (world^.currentLevel))
+  let level = fromMaybe (emptyLevel "Unnamed level") (world^.levels.at (world^.currentLevel))
       actor = fromMaybe sentinelActor (level^.actorById (world^.currentActor))
    in (level, world^.currentLevel, actor, world^.currentActor)
 
