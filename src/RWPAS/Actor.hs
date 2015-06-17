@@ -2,6 +2,7 @@ module RWPAS.Actor
   ( sentinelActor
   , Actor()
   , ActorAppearance(..)
+  , appearance
   , position )
   where
 

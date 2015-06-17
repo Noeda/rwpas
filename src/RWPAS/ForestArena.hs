@@ -7,6 +7,7 @@ module RWPAS.ForestArena
   ( newForestArena )
   where
 
+import Control.Lens hiding ( Level, inside )
 import Control.Monad.Primitive
 import Data.Data
 import Data.Foldable
@@ -14,14 +15,21 @@ import Data.Set ( Set )
 import qualified Data.Set as S
 import GHC.Generics
 import Linear.V2
+import RWPAS.Actor
+import RWPAS.AIControlledActor
+import RWPAS.AIControlledActor.BeastFrog
+import RWPAS.CommonTypes ( RunningID )
 import RWPAS.Level
 import RWPAS.Rectangle
 import System.Random.MWC
 
-newForestArena :: forall m. PrimMonad m => Gen (PrimState m) -> m Level
-newForestArena rng = do
+newForestArena :: forall m. PrimMonad m
+               => Gen (PrimState m)
+               -> RunningID
+               -> m (Level, RunningID)
+newForestArena rng rid = do
   houses <- placeHouse 100 S.empty rng
-  generateLevelM "Alma's Village" 500 500 $ \x y -> do
+  lvl <- generateLevelM "Alma's Village" 500 500 $ \x y -> do
       -- distance from center
     let dist2 = sqrt $ fromIntegral $ (250-x)*(250-x) + (250-y)*(250-y) :: Double
       -- probability that this place should be empty
@@ -45,6 +53,9 @@ newForestArena rng = do
                 then return $ if which_variant > 0.3 then Tree1 else Tree2
                 else return $ if which_variant > 0.2 then Grass else Dirt
 
+  placeFrogs 500 rng rid lvl
+
+
 type Tries = Int
 
 data House = House Rectangle (V2 Int)
@@ -55,6 +66,30 @@ getDoorPosition (House _ door) = door
 
 getHouseRectangle :: House -> Rectangle
 getHouseRectangle (House rect _) = rect
+
+placeFrogs :: forall m. PrimMonad m
+           => Int
+           -> Gen (PrimState m)
+           -> RunningID
+           -> Level
+           -> m (Level, RunningID)
+placeFrogs 0 _ rid level = return (level, rid)
+placeFrogs n rng rid level = do
+  let V2 w h = levelSize level
+  x <- uniformR (0, w-1) rng
+  y <- uniformR (0, h-1) rng
+  let tf = terrainFeature (V2 x y) level
+  if impassable tf
+    then placeFrogs n rng rid level
+    else case actorByCoordinates (V2 x y) level of
+           Nothing -> do
+             frog_ai <- initialState rng :: m BeastFrogState
+             let new_level = bestowAI rid (AI frog_ai) $
+                             insertActor rid (sentinelActor &
+                               (position .~ V2 x y) .
+                               (appearance .~ BeastFrog)) level
+             placeFrogs (n-1) rng (rid+1) new_level
+           Just _ -> placeFrogs n rng rid level
 
 placeHouse :: PrimMonad m
            => Tries

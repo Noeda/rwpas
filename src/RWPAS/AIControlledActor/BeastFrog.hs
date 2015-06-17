@@ -8,9 +8,11 @@ module RWPAS.AIControlledActor.BeastFrog
   where
 
 import Control.Lens
+import Control.Monad.Primitive
 import Data.Data
 import Data.SafeCopy
 import GHC.Generics
+import RWPAS.AIControlledActor.AIControlMonad
 import RWPAS.AIControlledActor.Types
 import RWPAS.Turn
 import System.Random.MWC
@@ -38,8 +40,8 @@ instance IsAI BeastFrogState where
 
   aiName _ = "BeastFrog"
 
-beastFrogTransition :: AITransition a
-beastFrogTransition = runAIControlMonad $
-  return ()
-
+beastFrogTransition :: PrimMonad m => AITransition m BeastFrogState
+beastFrogTransition = runAIControlMonad $ do
+  d <- rollUniform
+  move d
 

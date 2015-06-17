@@ -19,6 +19,8 @@ module RWPAS.Level
   , terrainFeature
   , TerrainFeature(..)
   , levelName
+  , levelSize
+  , impassable
   -- * Simulation
   , cycleLevel
   -- * Actor handling
@@ -46,20 +48,24 @@ module RWPAS.Level
   where
 
 import           Control.Lens hiding ( Level )
+import           Control.Monad.Primitive
 import           Control.Monad.State.Strict
 import           Data.Data
 import           Data.Foldable
 import qualified Data.IntMap as IM
 import qualified Data.IntSet as IS
 import qualified Data.Map.Strict as M
+import           Data.Maybe
 import           Data.Text ( Text )
 import           GHC.Generics
 import           Linear.V2
 import           RWPAS.Actor
+import           RWPAS.AIControlledActor
 import           RWPAS.CommonTypes
 import           RWPAS.Direction
 import           RWPAS.FieldOfView
 import           RWPAS.TwoDimensionalVector
+import           System.Random.MWC
 
 -- | Describes the size of something.
 type Size = V2 Int
@@ -112,18 +118,6 @@ addPortal portal portal_id = execState $ do
      in portalKeys.at pos %= Just . \case
           Nothing -> IS.singleton portal_id
           Just set -> IS.insert portal_id set
-
--- | Removes an actor from the level.
---
--- Does nothing if the actor is not in the level.
-removeActor :: ActorID -> Level -> Level
-removeActor aid level =
-  case level^.actors.at aid of
-    Nothing -> level
-    Just actor ->
-      level & (actors.at aid .~ Nothing) .
-              (actorKeys.at (actor^.position) .~ Nothing) .
-              (actorAIs.at aid .~ Nothing)
 
 -- | Generate a level with a generator function.
 generateLevel :: Text -> Int -> Int -> (Int -> Int -> TerrainFeature) -> Level
@@ -224,24 +218,6 @@ seeThrough Tree1 = 1
 seeThrough Tree2 = 1
 seeThrough _ = 10000
 
--- | Inserts an actor somewhere on the level.
---
--- Actor already at the target position is overwritten, if there was anything
--- there.
-insertActor :: ActorID -> Actor -> Level -> Level
-insertActor aid actor =
-  (actors.at aid .~ Just actor) .
-  (actorKeys.at (actor^.position) .~ Just aid)
-
--- | Gives an artificial intelligence to an actor.
---
--- Does nothing if the given actor is not on the level.
-bestowAI :: ActorID -> AI -> Level -> Level
-bestowAI aid ai level =
-  case level^.actorById aid of
-    Nothing -> level
-    Just _ -> level & actorAIs.at aid .~ Just ai
-
 tryMoveActor :: ActorID -> Direction8 -> LevelID -> Level -> (LevelID -> Maybe Level) -> Maybe (Level, Maybe (LevelID, Level))
 tryMoveActor aid dir source_level_id level get_level = do
   actor <- IM.lookup aid (level^.actors)
@@ -249,7 +225,8 @@ tryMoveActor aid dir source_level_id level get_level = do
 
   case step dir actor_pos level of
     SameLevel new_actor_pos ->
-      if impassable (terrainFeature new_actor_pos level)
+      if impassable (terrainFeature new_actor_pos level) ||
+         isJust (actorByCoordinates new_actor_pos level)
         then Nothing
         else Just (level &
                    (actorKeys.at new_actor_pos .~ Just aid) .
@@ -264,7 +241,8 @@ tryMoveActor aid dir source_level_id level get_level = do
       -- level.
       case get_level new_level_id of
         Nothing        -> Nothing
-        Just new_level -> if impassable (terrainFeature new_actor_pos new_level)
+        Just new_level -> if impassable (terrainFeature new_actor_pos new_level) ||
+                             isJust (actorByCoordinates new_actor_pos new_level)
             then Nothing
             else Just (level & (actors.at aid .~ Nothing) .
                                (actorKeys.at actor_pos .~ Nothing) .
@@ -398,7 +376,17 @@ levelFieldOfView x_extent y_extent coords level level_id get_level i_see =
 {-# INLINE levelFieldOfView #-}
 
 -- | Simulates all actors on the level for one cycle.
-cycleLevel :: Level -> Level
-cycleLevel = execState $ do
-  return ()
+cycleLevel :: PrimMonad m => LevelID -> World -> Gen (PrimState m) -> m World
+cycleLevel level_id world rng =
+  case world^.levelById level_id of
+    Nothing -> return world
+    Just lvl -> flip execStateT world $ ifor_ (lvl^.actorAIs) $ \aid ai -> do
+      w <- get
+      case w^.levelById level_id of
+        Nothing -> return ()
+        Just lvl -> case lvl^.actorById aid of
+          Nothing -> return ()
+          Just _ -> do
+            new_world <- stepAI ai rng w aid level_id
+            put new_world
 

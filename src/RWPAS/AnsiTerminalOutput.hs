@@ -34,6 +34,7 @@ import GHC.Generics
 import Linear.V2
 import RWPAS.Actor
 import RWPAS.Control
+import RWPAS.CommonTypes
 import RWPAS.Direction
 import RWPAS.ForestArena
 import RWPAS.Level
@@ -129,7 +130,9 @@ splashScreen = do
 startGame :: IO ()
 startGame = do
   rng <- createSystemRandom
-  initial_world <- singletonWorld <$> newForestArena rng
+  (forest, rid) <- newForestArena rng 3
+  let initial_world' = singletonWorld forest
+      initial_world = initial_world' & runningID .~ rid
 
   setSGR [Reset]
   clearScreen
@@ -137,13 +140,13 @@ startGame = do
   V2 tw th <- liftIO getWindowSize
   let initial_cache = newCache tw th
 
-  gameLoop initial_world initial_cache tw th
+  gameLoop initial_world initial_cache tw th rng
  where
   newCache w h = M.fromList [ (V2 x y, Square ' ' White False Black) |
                               x <- [0..w-1]
                             , y <- [0..h-1] ]
 
-  gameLoop world cache last_tw last_th = do
+  gameLoop world cache last_tw last_th rng = do
     V2 tw th <- getWindowSize
 
     actual_cache <- if tw /= last_tw || th /= last_th
@@ -153,7 +156,11 @@ startGame = do
     new_cache <- writeLevel world actual_cache
 
     cmd <- getNextCommand
-    gameLoop (performCommand cmd world) new_cache tw th
+    case performCommand cmd world of
+      Nothing -> gameLoop world new_cache tw th rng
+      Just w -> do
+        new_world' <- cycleWorld rng w
+        gameLoop new_world' new_cache tw th rng
 
   getNextCommand = do
     maybe_cmd <- charToCommand <$> getChar
@@ -183,6 +190,7 @@ charToCommand _ = Nothing
 
 appearanceToCell :: ActorAppearance -> Square
 appearanceToCell PlayerCharacter = Square '@' White True Black
+appearanceToCell BeastFrog = Square 'F' Green True Black
 
 -- | Mapping from level features to characters to show on screen.
 featureToCell :: TerrainFeature -> Square

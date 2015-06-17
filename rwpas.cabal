@@ -14,6 +14,7 @@ library
   exposed-modules:     RWPAS.Actor
                        RWPAS.AnsiTerminalOutput
                        RWPAS.AIControlledActor
+                       RWPAS.AIControlledActor.AIControlMonad
                        RWPAS.AIControlledActor.ListOfAIs
                        RWPAS.AIControlledActor.BeastFrog
                        RWPAS.AIControlledActor.Types

@@ -15,6 +15,8 @@ module RWPAS.Control
   , levelById
   -- * Field of view
   , getCurrentFieldOfView
+  -- * Simulating the world
+  , cycleWorld
   -- * Managing actors
   , relocateActor
   , performCommand
@@ -22,7 +24,9 @@ module RWPAS.Control
   , actorNextToPlayer )
   where
 
+import           Control.Applicative
 import           Control.Lens hiding ( Level, levels )
+import           Control.Monad.Primitive
 import           Control.Monad.ST
 import           Control.Monad.State.Strict
 import           Data.Data
@@ -38,6 +42,7 @@ import           RWPAS.CommonTypes
 import           RWPAS.Direction
 import           RWPAS.Level
 import           RWPAS.TwoDimensionalVector
+import           System.Random.MWC
 
 data Command
   = Move !Direction8
@@ -119,8 +124,8 @@ currentActorLevelAndCoordinates world =
       actor = fromMaybe sentinelActor (level^.actorById (world^.currentActor))
    in (level, world^.currentLevel, actor, world^.currentActor)
 
-performCommand :: Command -> World -> World
-performCommand (Move dir) world = flip execState world $ do
+performCommand :: Command -> World -> Maybe World
+performCommand (Move dir) world = flip execStateT world $ do
   lvl <- fromJust <$> use (levels.at (world^.currentLevel))
   case tryMoveActor (world^.currentActor) dir (world^.currentLevel) lvl (\lid -> world^.levels.at lid) of
     Just (new_lvl, maybe_more_levels) -> do
@@ -130,7 +135,18 @@ performCommand (Move dir) world = flip execState world $ do
         Just (more_level_id, more_level) ->
           levels.at more_level_id .= Just more_level
       modify computeFieldOfView
-    _ -> return ()
+    _ -> empty
+
+cycleWorld :: PrimMonad m
+           => Gen (PrimState m)
+           -> World
+           -> m World
+cycleWorld rng = execStateT $ do
+  w <- get
+  ifor_ (w^.levels) $ \level_id _ -> do
+    current_w <- get
+    new_w <- lift $ cycleLevel level_id current_w rng
+    put new_w
 
 -- | Returns `True` if an actor on given level is next to a position.
 actorNextToPlayer :: LevelCoordinates -> LevelID -> World -> Bool

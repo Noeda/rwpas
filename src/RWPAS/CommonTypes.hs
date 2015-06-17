@@ -28,6 +28,7 @@ module RWPAS.CommonTypes
   , LevelID
   , TerrainFeature(..)
   , levelName
+  , levelSize
   , actors
   , actorKeys
   , actorAIs
@@ -37,6 +38,9 @@ module RWPAS.CommonTypes
   , portals
   , portalKeys
   , terrain
+  , insertActor
+  , removeActor
+  , bestowAI
   -- * AI
   , AI(..)
   , AITransition
@@ -44,6 +48,8 @@ module RWPAS.CommonTypes
   --  World
   , World(..)
   , HasWorld(..)
+  , RunningID
+  , runningID
   , levelById
   , levels
   , currentFieldOfView
@@ -51,6 +57,7 @@ module RWPAS.CommonTypes
   , currentLevel )
   where
 
+import           Control.Monad.Primitive
 import           Control.Lens hiding ( Level, levels )
 import qualified Data.ByteString as B
 import           Data.Data
@@ -70,8 +77,8 @@ import           Unsafe.Coerce
 class (SafeCopy a, Eq a, Ord a, Show a, Read a, Typeable a) => IsAI a where
   {-# MINIMAL initialState, transitionFunction, aiName #-}
 
-  initialState :: GenIO -> IO a
-  transitionFunction :: AITransition a
+  initialState :: PrimMonad m => Gen (PrimState m) -> m a
+  transitionFunction :: PrimMonad m => AITransition m a
   aiName :: Proxy a -> B.ByteString
 
 data Actor = Actor
@@ -81,6 +88,7 @@ data Actor = Actor
 
 data ActorAppearance
   = PlayerCharacter
+  | BeastFrog
   deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic, Enum )
 
 type ActorID = Int
@@ -106,13 +114,13 @@ instance Show AI where
   show (AI a) = "AI<" ++ show a ++ ">"
 
 -- | Function that decides the next action of an AI.
-type AITransition a =
+type AITransition m a =
      a        -- state of the AI (parametric)
-  -> GenIO    -- random number generator
+  -> Gen (PrimState m)    -- random number generator
   -> World    -- world state
   -> ActorID  -- actor ID of the actor controlled by this AI
   -> LevelID  -- level ID of the level the actor is in
-  -> IO (a, World)
+  -> m World
 
 type FieldOfView = Vector2DG (Word8, Word8)
 
@@ -156,12 +164,14 @@ data Portal = Portal
 
 type PortalID = Int
 
+type RunningID = Int
+
 data World = World
   { _levels             :: !(IntMap Level)
   , _currentLevel       :: !LevelID
   , _currentActor       :: !ActorID
   , _currentFieldOfView :: !FieldOfView
-  , _runningID          :: !Int }
+  , _runningID          :: !RunningID }
   deriving ( Eq, Ord, Show, Typeable, Generic )
 makeLenses ''Actor
 makeLenses ''Level
@@ -188,4 +198,39 @@ actorById aid = actors.at aid
 
 actorByCoordinates :: LevelCoordinates -> Level -> Maybe ActorID
 actorByCoordinates coords level = level^.actorKeys.at coords
+
+levelSize :: Level -> V2 Int
+levelSize lvl = V2 (viewWidth (lvl^.terrain)) (viewHeight (lvl^.terrain))
+{-# INLINE levelSize #-}
+
+
+-- | Inserts an actor somewhere on the level.
+--
+-- Actor already at the target position is overwritten, if there was anything
+-- there.
+insertActor :: ActorID -> Actor -> Level -> Level
+insertActor aid actor =
+  (actors.at aid .~ Just actor) .
+  (actorKeys.at (actor^.position) .~ Just aid)
+
+-- | Gives an artificial intelligence to an actor.
+--
+-- Does nothing if the given actor is not on the level.
+bestowAI :: ActorID -> AI -> Level -> Level
+bestowAI aid ai level =
+  case level^.actorById aid of
+    Nothing -> level
+    Just _ -> level & actorAIs.at aid .~ Just ai
+
+-- | Removes an actor from the level.
+--
+-- Does nothing if the actor is not in the level.
+removeActor :: ActorID -> Level -> Level
+removeActor aid level =
+  case level^.actors.at aid of
+    Nothing -> level
+    Just actor ->
+      level & (actors.at aid .~ Nothing) .
+              (actorKeys.at (actor^.position) .~ Nothing) .
+              (actorAIs.at aid .~ Nothing)
 

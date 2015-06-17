@@ -9,7 +9,7 @@ import Data.Foldable
 import Data.Proxy
 import Data.SafeCopy
 import Data.Serialize.Put
-import RWPAS.AIControlledActor.ListOfAIs
+import {-# SOURCE #-} RWPAS.AIControlledActor.ListOfAIs
 import RWPAS.AIControlledActor.Types
 
 proxy :: a -> Proxy a
