@@ -9,26 +9,37 @@
 
 module RWPAS.Level
   ( Level()
-  , LevelID
-  , TerrainFeature(..)
-  , levelName
-  , addPortal
+  -- * Level construction
   , generateLevel
   , generateLevelM
-  , insertActor
-  , portalOnRightSideLevel
   , emptyLevel
   , roomLevel
+  , portalOnRightSideLevel
+  , addPortal
   , terrainFeature
+  , TerrainFeature(..)
+  , levelName
+  -- * Actor handling
+  --
+  -- Some of these functions are in RWPAS.Control instead that's a bit higher
+  -- level than these.
+  , getMemoryAt
+  , insertActor
+  , tryMoveActor
+  , removeActor
   , actors
   , actorById
   , actorByCoordinates
   , updateActorMemories
-  , getMemoryAt
-  , tryMoveActor
-  , Size
+  -- * Types, coordinates, sizes
   , LevelCoordinates
-  , levelFieldOfView )
+  , Size
+  , LevelID
+  -- * Computing field of view
+  , levelFieldOfView
+  -- * Stepping
+  , step
+  , StepResult(..) )
   where
 
 import           Control.Lens hiding ( Level )
@@ -141,6 +152,17 @@ addPortal portal portal_id = execState $ do
           Nothing -> IS.singleton portal_id
           Just set -> IS.insert portal_id set
 
+-- | Removes an actor from the level.
+--
+-- Does nothing if the actor is not in the level.
+removeActor :: ActorID -> Level -> Level
+removeActor aid level =
+  case level^.actors.at aid of
+    Nothing -> level
+    Just actor ->
+      level & (actors.at aid .~ Nothing) .
+              (actorKeys.at (actor^.position) .~ Nothing)
+
 -- | Generate a level with a generator function.
 generateLevel :: Text -> Int -> Int -> (Int -> Int -> TerrainFeature) -> Level
 generateLevel name w h generator = (emptyLevel name)
@@ -245,6 +267,10 @@ seeThrough Tree1 = 1
 seeThrough Tree2 = 1
 seeThrough _ = 10000
 
+-- | Inserts an actor somewhere on the level.
+--
+-- Actor already at the target position is overwritten, if there was anything
+-- there.
 insertActor :: ActorID -> Actor -> Level -> Level
 insertActor aid actor =
   (actors.at aid .~ Just actor) .
@@ -311,6 +337,8 @@ swapV2 :: V2 a -> V2 a
 swapV2 (V2 x y) = V2 y x
 {-# INLINE swapV2 #-}
 
+-- | Steps one unit to some direction in a level. Returns a `StepResult` that
+-- tells if the step moved through a portal or stayed on the same level.
 step :: Direction8 -> LevelCoordinates -> Level -> StepResult
 step dir coords@(V2 x y) level =
   case level^.portalKeys.at coords of

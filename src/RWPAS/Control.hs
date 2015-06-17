@@ -7,12 +7,19 @@
 
 module RWPAS.Control
   ( World()
+  , HasWorld(..)
   , Command(..)
-  , performCommand
+  -- * Construction of worlds
   , singletonWorld
+  -- * Accessing levels
   , levelById
+  -- * Field of view
+  , getCurrentFieldOfView
+  -- * Managing actors
+  , relocateActor
+  , performCommand
   , currentActorLevelAndCoordinates
-  , getCurrentFieldOfView )
+  , actorNextToPlayer )
   where
 
 import           Control.Lens hiding ( Level, levels )
@@ -47,6 +54,12 @@ data World = World
   , _runningID          :: !Int }
   deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
 makeLenses ''World
+
+class HasWorld a where
+  world :: Lens' a World
+
+instance HasWorld World where
+  world = lens id (\_ new -> new)
 
 levelById :: LevelID -> Lens' World (Maybe Level)
 levelById lid = levels.at lid
@@ -139,4 +152,47 @@ performCommand (Move dir) world = flip execState world $ do
           levels.at more_level_id .= Just more_level
       modify computeFieldOfView
     _ -> return ()
+
+-- | Returns `True` if an actor on given level is next to a position.
+actorNextToPlayer :: LevelCoordinates -> LevelID -> World -> Bool
+actorNextToPlayer coordinates level_id world = fromMaybe False $ do
+  level <- world^.levels.at level_id
+  player_level <- world^.levels.at (world^.currentLevel)
+  player_actor <- player_level^.actorById (world^.currentActor)
+
+  let test level_id coords = level_id == world^.currentLevel &&
+                             coords == player_actor^.position
+
+  return $ flip any directions8 $ \dir -> case step dir coordinates level of
+    SameLevel coords -> test level_id coords
+    EnterLevel new_level_id coords -> test new_level_id coords
+
+-- | Takes an actor and moves it to target.
+--
+-- Returns `Nothing` if the attempted move is illegal (e.g. actor doesn't exist
+-- or there's an attempt to move it to non-existent level or if actor would
+-- occupy the space of another actor).
+relocateActor :: ActorID -> LevelID -> LevelID -> LevelCoordinates -> World -> Maybe World
+relocateActor aid src_level_id tgt_level_id target_coordinates world = do
+  src_level <- world^.levels.at src_level_id
+  tgt_level <- world^.levels.at tgt_level_id
+  actor <- src_level^.actorById aid
+  let new_actor = actor & position .~ target_coordinates
+
+  case actorByCoordinates target_coordinates tgt_level of
+    Just tgt_aid | tgt_aid == aid -> return world
+    Just _ -> Nothing
+    Nothing -> do
+      let new_src_level = removeActor aid src_level
+          new_tgt_level = insertActor aid new_actor $
+                          removeActor aid tgt_level
+
+      -- Note: src_level and tgt_level may be the same and actually in most
+      -- cases are. This is why target level is set last; it'll overwrite
+      -- src_level if they are the same.
+      return $ world &
+        (levels.at tgt_level_id .~ Just new_tgt_level) .
+        (levels.at src_level_id .~ Just new_src_level)
+-- Inline because this is an often called function.
+{-# INLINE relocateActor #-}
 

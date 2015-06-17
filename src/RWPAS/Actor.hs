@@ -4,6 +4,7 @@
 
 module RWPAS.Actor
   ( Actor()
+  , HasActor(..)
   , ActorAppearance(..)
   , ActorPosition
   , ActorID
@@ -31,6 +32,12 @@ data Actor = Actor
 type ActorPosition = V2 Int
 
 makeLenses ''Actor
+
+class HasActor a where
+  actor :: Lens' a Actor
+
+instance HasActor Actor where
+  actor = lens id (\_ new -> new)
 
 -- | Sentinel actor. Not meant to be used as-is, take it and modify it to be a
 -- proper actor.
