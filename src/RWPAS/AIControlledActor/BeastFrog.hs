@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveGeneric #-}
 
@@ -34,6 +35,8 @@ instance IsAI BeastFrogState where
     return BeastFrogState { _staminaCounter = fromIntegral initial_stamina }
 
   transitionFunction = beastFrogTransition
+
+  aiName _ = "BeastFrog"
 
 beastFrogTransition :: AITransition a
 beastFrogTransition = runAIControlMonad $
