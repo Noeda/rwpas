@@ -32,38 +32,17 @@ import Control.Lens hiding ( Level )
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Maybe
 import Control.Monad.State.Strict
-import qualified Data.ByteString as B
 import Data.Data
 import Data.SafeCopy
 import GHC.Generics
 import RWPAS.Actor
-import RWPAS.Control
-import RWPAS.Level
+import RWPAS.CommonTypes
 import System.Random.MWC
 
 -- | Sessile AI, used as a placeholder.
 data SentinelAI = SentinelAI
   deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic, Enum )
 deriveSafeCopy 0 'base ''SentinelAI
-
--- | Function that decides the next action of an AI.
-type AITransition a =
-     a        -- state of the AI (parametric)
-  -> GenIO    -- random number generator
-  -> World    -- world state
-  -> ActorID  -- actor ID of the actor controlled by this AI
-  -> LevelID  -- level ID of the level the actor is in
-  -> IO (a, World)
-
-class (SafeCopy a, Typeable a) => IsAI a where
-  {-# MINIMAL initialState, transitionFunction, aiName #-}
-
-  initialState :: GenIO -> IO a
-  transitionFunction :: AITransition a
-  aiName :: Proxy a -> B.ByteString
-
-data AI = forall a. (IsAI a) => AI a
-  deriving ( Typeable )
 
 stepAI :: MonadIO m => AI -> GenIO -> World -> ActorID -> LevelID -> m (AI, World)
 stepAI (AI state) rng world actor_id level_id =

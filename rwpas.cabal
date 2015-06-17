@@ -18,6 +18,7 @@ library
                        RWPAS.AIControlledActor.BeastFrog
                        RWPAS.AIControlledActor.Types
                        RWPAS.Control
+                       RWPAS.CommonTypes
                        RWPAS.Direction
                        RWPAS.FieldOfView
                        RWPAS.ForestArena

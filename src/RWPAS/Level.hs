@@ -19,6 +19,8 @@ module RWPAS.Level
   , terrainFeature
   , TerrainFeature(..)
   , levelName
+  -- * Simulation
+  , cycleLevel
   -- * Actor handling
   --
   -- Some of these functions are in RWPAS.Control instead that's a bit higher
@@ -31,6 +33,7 @@ module RWPAS.Level
   , actorById
   , actorByCoordinates
   , updateActorMemories
+  , bestowAI
   -- * Types, coordinates, sizes
   , LevelCoordinates
   , Size
@@ -46,64 +49,22 @@ import           Control.Lens hiding ( Level )
 import           Control.Monad.State.Strict
 import           Data.Data
 import           Data.Foldable
-import           Data.IntSet ( IntSet )
-import qualified Data.IntSet as IS
-import           Data.IntMap ( IntMap )
 import qualified Data.IntMap as IM
-import           Data.Map.Strict ( Map )
+import qualified Data.IntSet as IS
 import qualified Data.Map.Strict as M
 import           Data.Text ( Text )
 import           GHC.Generics
 import           Linear.V2
 import           RWPAS.Actor
+import           RWPAS.CommonTypes
 import           RWPAS.Direction
 import           RWPAS.FieldOfView
 import           RWPAS.TwoDimensionalVector
 
-data Level = Level
-  { _terrain       :: !Vector2D
-  , _portals       :: !(IntMap Portal)
-  , _portalKeys    :: !(Map LevelCoordinates IntSet)
-  , _actorKeys     :: !(Map LevelCoordinates ActorID)
-  , _actors        :: !(IntMap Actor)
-  , _actorMemories :: !(Map ActorID (Map LevelCoordinates TerrainFeature))
-  , _levelName     :: !Text }
-  deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
-
--- | Coordinates relative to some `Level`.
-type LevelCoordinates = V2 Int
-
-type LevelID = Int
-
 -- | Describes the size of something.
 type Size = V2 Int
 
-data Portal = Portal
-  { _axis                       :: !Direction4
-  , _targetLevel                :: !LevelID
-  , _targetLevelAxisTopPosition :: !Int
-  , _targetLevelAxisPosition    :: !Int
-  , _portalLength               :: !Int
-  , _axisTopPosition            :: !Int
-  , _axisPosition               :: !Int }
-  deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
-
-type PortalID = Int
-
-data TerrainFeature
-  = Floor
-  | Wall
-  | Planks
-  | PlanksFloor
-  | Tree1
-  | Tree2
-  | Dirt
-  | Grass
-  | Rock   -- ^ Same as `Wall` but completely black.
-  deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic, Enum )
-
 -- Derive lenses here
-makeLenses ''Level
 makeLenses ''Portal
 
 -- | If there's no feature at some coordinate, what we should assume it is?
@@ -161,7 +122,8 @@ removeActor aid level =
     Nothing -> level
     Just actor ->
       level & (actors.at aid .~ Nothing) .
-              (actorKeys.at (actor^.position) .~ Nothing)
+              (actorKeys.at (actor^.position) .~ Nothing) .
+              (actorAIs.at aid .~ Nothing)
 
 -- | Generate a level with a generator function.
 generateLevel :: Text -> Int -> Int -> (Int -> Int -> TerrainFeature) -> Level
@@ -184,6 +146,7 @@ emptyLevel name = Level { _terrain    = generate 1 1 $ \_ _ -> fromIntegral $ fr
                    , _actors        = mempty
                    , _actorMemories = mempty
                    , _actorKeys     = mempty
+                   , _actorAIs      = mempty
                    , _portals       = mempty
                    , _portalKeys    = mempty
                    , _levelName     = name }
@@ -226,6 +189,7 @@ roomLevel :: Size -> Level
 roomLevel (V2 w h) = Level { _terrain       = makeOneRoom w h
                            , _actors        = mempty
                            , _actorKeys     = mempty
+                           , _actorAIs      = mempty
                            , _actorMemories = mempty
                            , _portals       = mempty
                            , _portalKeys    = mempty
@@ -243,13 +207,6 @@ terrainFeature :: LevelCoordinates -> Level -> TerrainFeature
 terrainFeature coords level =
   toEnum $ fromIntegral $ getAt coords (level^.terrain) (fromIntegral $ fromEnum Rock)
 {-# INLINE terrainFeature #-}
-
--- | Lens to an actor using some actor ID.
-actorById :: ActorID -> Lens' Level (Maybe Actor)
-actorById aid = actors.at aid
-
-actorByCoordinates :: LevelCoordinates -> Level -> Maybe ActorID
-actorByCoordinates coords level = level^.actorKeys.at coords
 
 impassable :: TerrainFeature -> Bool
 impassable Floor  = False
@@ -276,6 +233,15 @@ insertActor aid actor =
   (actors.at aid .~ Just actor) .
   (actorKeys.at (actor^.position) .~ Just aid)
 
+-- | Gives an artificial intelligence to an actor.
+--
+-- Does nothing if the given actor is not on the level.
+bestowAI :: ActorID -> AI -> Level -> Level
+bestowAI aid ai level =
+  case level^.actorById aid of
+    Nothing -> level
+    Just _ -> level & actorAIs.at aid .~ Just ai
+
 tryMoveActor :: ActorID -> Direction8 -> LevelID -> Level -> (LevelID -> Maybe Level) -> Maybe (Level, Maybe (LevelID, Level))
 tryMoveActor aid dir source_level_id level get_level = do
   actor <- IM.lookup aid (level^.actors)
@@ -301,9 +267,11 @@ tryMoveActor aid dir source_level_id level get_level = do
         Just new_level -> if impassable (terrainFeature new_actor_pos new_level)
             then Nothing
             else Just (level & (actors.at aid .~ Nothing) .
-                               (actorKeys.at actor_pos .~ Nothing)
+                               (actorKeys.at actor_pos .~ Nothing) .
+                               (actorAIs.at aid .~ Nothing)
                       ,Just (new_level_id
                             ,new_level &
+                             (actorAIs.at aid .~ (level^.actorAIs.at aid)) .
                              (actors.at aid .~ Just (actor & position .~ new_actor_pos)) .
                              (actorKeys.at new_actor_pos .~ Just aid) .
                              (if source_level_id == new_level_id
@@ -428,4 +396,9 @@ levelFieldOfView x_extent y_extent coords level level_id get_level i_see =
             put (new_level, new_level_id)
             return $ Just new_coords
 {-# INLINE levelFieldOfView #-}
+
+-- | Simulates all actors on the level for one cycle.
+cycleLevel :: Level -> Level
+cycleLevel = execState $ do
+  return ()
 

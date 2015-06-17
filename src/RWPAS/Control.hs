@@ -27,15 +27,14 @@ import           Control.Monad.ST
 import           Control.Monad.State.Strict
 import           Data.Data
 import           Data.Foldable
-import           Data.IntMap ( IntMap )
 import qualified Data.IntMap.Strict as IM
 import           Data.Map.Strict ( Map )
 import qualified Data.Map.Strict as M
 import           Data.Maybe
-import           Data.Word
 import           GHC.Generics
 import           Linear.V2
 import           RWPAS.Actor
+import           RWPAS.CommonTypes
 import           RWPAS.Direction
 import           RWPAS.Level
 import           RWPAS.TwoDimensionalVector
@@ -43,26 +42,6 @@ import           RWPAS.TwoDimensionalVector
 data Command
   = Move !Direction8
   deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
-
-type FieldOfView = Vector2DG (Word8, Word8)
-
-data World = World
-  { _levels             :: !(IntMap Level)
-  , _currentLevel       :: !LevelID
-  , _currentActor       :: !ActorID
-  , _currentFieldOfView :: !FieldOfView
-  , _runningID          :: !Int }
-  deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
-makeLenses ''World
-
-class HasWorld a where
-  world :: Lens' a World
-
-instance HasWorld World where
-  world = lens id (\_ new -> new)
-
-levelById :: LevelID -> Lens' World (Maybe Level)
-levelById lid = levels.at lid
 
 getCurrentFieldOfView :: World -> (Int, Int, Int -> Int -> (Maybe ActorAppearance, Maybe TerrainFeature))
 getCurrentFieldOfView world =
