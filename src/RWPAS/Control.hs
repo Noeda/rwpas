@@ -17,6 +17,7 @@ module RWPAS.Control
   , getCurrentFieldOfView
   -- * Simulating the world
   , cycleWorld
+  , computeFieldOfView
   -- * Managing actors
   , relocateActor
   , performCommand
@@ -134,7 +135,6 @@ performCommand (Move dir) world = flip execStateT world $ do
         Nothing -> return ()
         Just (more_level_id, more_level) ->
           levels.at more_level_id .= Just more_level
-      modify computeFieldOfView
     _ -> empty
 
 cycleWorld :: PrimMonad m

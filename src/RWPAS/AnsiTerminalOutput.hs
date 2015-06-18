@@ -160,7 +160,8 @@ startGame = do
       Nothing -> gameLoop world new_cache tw th rng
       Just w -> do
         new_world' <- cycleWorld rng w
-        gameLoop new_world' new_cache tw th rng
+        let new_world'' = computeFieldOfView new_world'
+        gameLoop new_world'' new_cache tw th rng
 
   getNextCommand = do
     maybe_cmd <- charToCommand <$> getChar
