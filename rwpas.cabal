@@ -21,6 +21,7 @@ library
                        RWPAS.Control
                        RWPAS.CommonTypes
                        RWPAS.Direction
+                       RWPAS.Debug
                        RWPAS.FieldOfView
                        RWPAS.ForestArena
                        RWPAS.Level
