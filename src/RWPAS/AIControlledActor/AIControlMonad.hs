@@ -16,7 +16,9 @@ module RWPAS.AIControlledActor.AIControlMonad
   , AIControlMonad()
   , runAIControlMonad
   , rollUniform
-  , rollUniformR )
+  , rollUniformR
+  , distanceToPlayer
+  , getDirectionTowardsPlayer )
   where
 
 import Control.Applicative
@@ -25,8 +27,11 @@ import Control.Monad.Primitive
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Maybe
 import Data.Data
+import Data.Foldable
+import Data.Ord
 import GHC.Generics
 import RWPAS.CommonTypes
+import RWPAS.Control
 import RWPAS.Direction
 import RWPAS.Level
 import System.Random.MWC
@@ -108,7 +113,35 @@ move dir = AIControlMonad $ do
 --
 -- This is purely for convenience and AIs don't have to actually use it.
 newtype AIControlMonad m a r = AIControlMonad (StateT (AIControlState m a) (MaybeT m) r)
-  deriving ( Alternative, Functor, Applicative, Monad, Typeable, Generic )
+  deriving ( Alternative, Functor, Applicative, Monad, Typeable, Generic
+           , MonadState (AIControlState m a) )
+
+-- | Returns an estimated distance to player.
+distanceToPlayer :: (Monad m, IsAI a) => AIControlMonad m a Int
+distanceToPlayer = do
+  pos <- (^.position) <$> myActor
+  AIControlMonad $ do
+    w <- use aiWorld
+    l <- use aiActorLevel
+    return $ estimateDistance pos l (w^.currentActor) (w^.currentLevel) w
+
+-- | Returns a guess on the direction where player might be.
+--
+-- Does not do path searching, simply points to the direction of the player.
+-- This is also cheap.
+getDirectionTowardsPlayer :: (Monad m, IsAI a) => AIControlMonad m a Direction8
+getDirectionTowardsPlayer = do
+  pos <- (^.position) <$> myActor
+  lev <- myLevel
+  AIControlMonad $ do
+    w <- use aiWorld
+    l <- use aiActorLevel
+
+    let player_id = w^.currentActor
+        level_id  = w^.currentLevel
+    return $ fst $ minimumBy (comparing snd) $ flip fmap directions8 $ \dir -> (dir, case step dir pos lev of
+      SameLevel new_pos -> estimateDistance new_pos l player_id level_id w
+      EnterLevel new_lvl_id new_pos -> estimateDistance new_pos new_lvl_id player_id level_id w)
 
 runAIControlMonad :: (Monad m, IsAI a) => AIControlMonad m a () -> AITransition m a
 runAIControlMonad (AIControlMonad monad) actor_state rng world actor_id level_id = do

@@ -22,7 +22,8 @@ module RWPAS.Control
   , relocateActor
   , performCommand
   , currentActorLevelAndCoordinates
-  , actorNextToPlayer )
+  , actorNextToPlayer
+  , estimateDistance )
   where
 
 import           Control.Applicative
@@ -191,3 +192,24 @@ relocateActor aid src_level_id tgt_level_id target_coordinates world = do
 -- Inline because this is an often called function.
 {-# INLINE relocateActor #-}
 
+-- | Returns an estimation of distance to another actor, by diagonal distance.
+--
+-- May (grossly) overestimate the distance but never underestimates.
+estimateDistance :: LevelCoordinates -> LevelID -> ActorID -> LevelID -> World -> Int
+estimateDistance coords lvl1 aid2 lvl2 world
+  | isNothing ac2' = maxBound
+  | otherwise =
+      -- if actors are on the same level, take their diagonal distance
+      -- directly.
+      if lvl1 == lvl2
+        then diagonalDistance coords (ac2^.position)
+        else maxBound
+ where
+  ac2' = world^.levelById lvl2 >>= \l -> l^.actorById aid2
+  Just ac2 = ac2'
+{-# INLINE estimateDistance #-}
+
+-- | Returns direction that points to the direction of another actor.
+--
+-- Not guaranteed to be accurate. Because portals can make world topology
+-- tricky, it might sometimes point to a direction that 

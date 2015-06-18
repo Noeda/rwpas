@@ -54,7 +54,8 @@ module RWPAS.CommonTypes
   , levels
   , currentFieldOfView
   , currentActor
-  , currentLevel )
+  , currentLevel
+  , diagonalDistance )
   where
 
 import           Control.Monad.Primitive
@@ -203,6 +204,11 @@ levelSize :: Level -> V2 Int
 levelSize lvl = V2 (viewWidth (lvl^.terrain)) (viewHeight (lvl^.terrain))
 {-# INLINE levelSize #-}
 
+-- | Returns the diagonal distance between two coordinates.
+diagonalDistance :: V2 Int -> V2 Int -> Int
+diagonalDistance (V2 x1 y1) (V2 x2 y2) =
+  max (abs $ x1-x2) (abs $ y1-y2)
+{-# INLINE diagonalDistance #-}
 
 -- | Inserts an actor somewhere on the level.
 --
