@@ -18,7 +18,8 @@ module RWPAS.AIControlledActor.AIControlMonad
   , rollUniform
   , rollUniformR
   , distanceToPlayer
-  , getDirectionTowardsPlayer )
+  , getDirectionTowardsPlayer
+  , emitDecoration )
   where
 
 import Control.Applicative
@@ -93,7 +94,7 @@ move dir = AIControlMonad $ do
           guardPassable level tgt
           aiWorld.levelById lid._Just %= removeActor aid
           aiWorld.levelById lid._Just %= insertActor aid (actor & position .~ tgt)
-        EnterLevel new_lid tgt -> case w^.levelById new_lid of
+        EnterLevel (WorldCoordinates tgt new_lid) -> case w^.levelById new_lid of
           Nothing -> empty
           Just new_level -> do
             guardPassable new_level tgt
@@ -141,7 +142,7 @@ getDirectionTowardsPlayer = do
         level_id  = w^.currentLevel
     return $ fst $ minimumBy (comparing snd) $ flip fmap directions8 $ \dir -> (dir, case step dir pos lev of
       SameLevel new_pos -> estimateDistance new_pos l player_id level_id w
-      EnterLevel new_lvl_id new_pos -> estimateDistance new_pos new_lvl_id player_id level_id w)
+      EnterLevel (WorldCoordinates new_pos new_lvl_id) -> estimateDistance new_pos new_lvl_id player_id level_id w)
 
 runAIControlMonad :: (Monad m, IsAI a) => AIControlMonad m a () -> AITransition m a
 runAIControlMonad (AIControlMonad monad) actor_state rng world actor_id level_id = do
@@ -169,4 +170,27 @@ rollUniformR range = AIControlMonad $ do
   rng <- use aiRNG
   lift $ lift $ uniformR range rng
 {-# INLINE rollUniformR #-}
+
+-- | Emits a decoration directly next to the actor to some direction.
+--
+-- Does not emit the decoration if the target position contains impassable
+-- terrain (in that case this function is a no-op). Other actors don't block
+-- decorations (but the decoration might not be seen under the actor).
+emitDecoration :: Monad m => Direction8 -> Decoration -> AIControlMonad m a ()
+emitDecoration dir decoration = do
+  actor <- myActor
+  lvl <- myLevel
+  AIControlMonad $ do
+    w <- use aiWorld
+    lvl_id <- use aiActorLevel
+    case step dir (actor^.position) lvl of
+      SameLevel new_pos ->
+        unless (impassable $ terrainFeature new_pos lvl) $
+          aiWorld .= (w & levelById lvl_id._Just.decorationByCoordinate new_pos .~ decoration)
+      EnterLevel (WorldCoordinates new_pos new_lvl_id) ->
+        case w^.levelById new_lvl_id of
+          Nothing -> empty
+          Just new_lvl ->
+            unless (impassable $ terrainFeature new_pos new_lvl) $
+              aiWorld .= (w & levelById new_lvl_id._Just.decorationByCoordinate new_pos .~ decoration)
 

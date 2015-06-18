@@ -152,8 +152,8 @@ cycleWorld rng = execStateT $ do
     put new_w
 
 -- | Returns `True` if an actor on given level is next to a position.
-actorNextToPlayer :: LevelCoordinates -> LevelID -> World -> Bool
-actorNextToPlayer coordinates level_id world = fromMaybe False $ do
+actorNextToPlayer :: WorldCoordinates -> World -> Bool
+actorNextToPlayer (WorldCoordinates coordinates level_id) world = fromMaybe False $ do
   level <- world^.levels.at level_id
   player_level <- world^.levels.at (world^.currentLevel)
   player_actor <- player_level^.actorById (world^.currentActor)
@@ -163,7 +163,7 @@ actorNextToPlayer coordinates level_id world = fromMaybe False $ do
 
   return $ flip any directions8 $ \dir -> case step dir coordinates level of
     SameLevel coords -> test level_id coords
-    EnterLevel new_level_id coords -> test new_level_id coords
+    EnterLevel (WorldCoordinates coords new_level_id) -> test new_level_id coords
 
 -- | Takes an actor and moves it to target.
 --

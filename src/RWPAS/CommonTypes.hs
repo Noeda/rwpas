@@ -50,6 +50,9 @@ module RWPAS.CommonTypes
   , IsAI(..)
   --  World
   , World(..)
+  , WorldCoordinates(..)
+  , levelCoordinates
+  , levelID
   , HasWorld(..)
   , RunningID
   , runningID
@@ -134,7 +137,7 @@ data Decoration
   deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
 
 instance Enum Decoration where
-  toEnum x | x > 1 && x <= 8 =
+  toEnum x | x >= 1 && x <= 8 =
     let dir = toEnum (x-1) :: Direction8
      in Spikes dir
   toEnum 0 = NotDecorated
@@ -195,9 +198,15 @@ data World = World
   , _currentFieldOfView :: !FieldOfView
   , _runningID          :: !RunningID }
   deriving ( Eq, Ord, Show, Typeable, Generic )
+
+data WorldCoordinates = WorldCoordinates
+  { _levelCoordinates :: !LevelCoordinates
+  , _levelID          :: !LevelID }
+  deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
 makeLenses ''Actor
 makeLenses ''Level
 makeLenses ''World
+makeLenses ''WorldCoordinates
 
 class HasActor a where
   actor :: Lens' a Actor

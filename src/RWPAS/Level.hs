@@ -246,7 +246,7 @@ tryMoveActor aid dir source_level_id level get_level = do
                    (actorKeys.at new_actor_pos .~ Just aid) .
                    (actors.at aid .~ Just (actor & position .~ new_actor_pos)) .
                    (actorKeys.at actor_pos .~ Nothing), Nothing)
-    EnterLevel new_level_id new_actor_pos ->
+    EnterLevel (WorldCoordinates new_actor_pos new_level_id) ->
       -- TODO: check any complications if new level is the same as old one
       -- (that is, portal goes to level itself)
       --
@@ -272,7 +272,7 @@ tryMoveActor aid dir source_level_id level get_level = do
 
 data StepResult
   = SameLevel !LevelCoordinates
-  | EnterLevel !LevelID !LevelCoordinates
+  | EnterLevel !WorldCoordinates
   deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
 
 couldPotentiallyGoThroughPortal :: Direction8 -> Direction4 -> Bool
@@ -320,7 +320,7 @@ step dir coords@(V2 x y) level =
                 DRight -> final_position_on_the_other_side + V2 x y
                 DUp    -> swapV2 final_position_on_the_other_side + V2 y x
                 DDown  -> swapV2 final_position_on_the_other_side + V2 y x
-           in EnterLevel (portal^.targetLevel) fixed_position_on_the_other_side
+           in EnterLevel (WorldCoordinates fixed_position_on_the_other_side (portal^.targetLevel))
  where
   local_target = direction8ToDelta dir + coords
 
@@ -381,7 +381,7 @@ levelFieldOfView x_extent y_extent coords level level_id get_level i_see =
     (lvl, _) <- get
     case step dir8 coords lvl of
       SameLevel new_coords -> return $ Just new_coords
-      EnterLevel new_level_id new_coords ->
+      EnterLevel (WorldCoordinates new_coords new_level_id) ->
         case get_level new_level_id of
           Nothing -> return Nothing
           Just new_level -> do
@@ -398,14 +398,16 @@ cycleLevel :: PrimMonad m => LevelID -> World -> Gen (PrimState m) -> m World
 cycleLevel level_id world rng =
   case world^.levelById level_id of
     Nothing -> return world
-    Just (removeDecorations -> lvl) -> flip execStateT world $ do
-      ifor_ (lvl^.actorAIs) $ \aid ai -> do
-        w <- get
-        case w^.levelById level_id of
-          Nothing -> return ()
-          Just lvl -> case lvl^.actorById aid of
-            Nothing -> return ()
-            Just _ -> do
-              new_world <- stepAI ai rng w aid level_id
-              put new_world
+    Just lvl ->
+      let new_world = world & levelById level_id .~ Just (removeDecorations lvl)
+       in flip execStateT new_world $
+            ifor_ (lvl^.actorAIs) $ \aid ai -> do
+              w <- get
+              case w^.levelById level_id of
+                Nothing -> return ()
+                Just lvl -> case lvl^.actorById aid of
+                  Nothing -> return ()
+                  Just _ -> do
+                    new_world <- stepAI ai rng w aid level_id
+                    put new_world
 
