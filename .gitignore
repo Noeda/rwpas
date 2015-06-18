@@ -2,4 +2,6 @@
 cabal.sandbox.config
 dist/
 *.prof
+warnings
+debug_log.txt
 
