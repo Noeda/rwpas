@@ -205,6 +205,18 @@ featureToCell Planks = Square '#' Yellow True Black
 featureToCell PlanksFloor = Square '.' Yellow True Black
 featureToCell Dirt = Square '.' Yellow False Black
 
+decorationToCell :: Decoration -> Square
+decorationToCell NotDecorated = Square ' ' White False Black
+decorationToCell (Spikes dir) = case dir of
+  D8Up        -> Square '|'  Black True Black
+  D8Down      -> Square '|'  Black True Black
+  D8Left      -> Square '-'  Black True Black
+  D8Right     -> Square '-'  Black True Black
+  D8UpLeft    -> Square '\\' Black True Black
+  D8UpRight   -> Square '/'  Black True Black
+  D8DownRight -> Square '\\' Black True Black
+  D8DownLeft  -> Square '/'  Black True Black
+
 type ScreenCache = Map (V2 Int) Square
 
 -- | Writes a level on the screen, at given offset.
@@ -252,8 +264,9 @@ writeLevel world cache = do
                         (actor^.position._y + y - (h `div` 2))
 
             case access x y of
-              (Just ap, _) -> modifier (appearanceToCell ap) op
-              (_, Just t)  -> modifier (featureToCell t) op
+              (Just ap, _, _) -> modifier (appearanceToCell ap) op
+              (_, _, dec) | dec /= NotDecorated -> modifier (decorationToCell dec) op
+              (_, Just t, _)  -> modifier (featureToCell t) op
               _ -> case getMemoryAt actor_id lvl lp of
                 Nothing -> return ()
                 Just v  ->

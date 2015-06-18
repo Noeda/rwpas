@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE MultiWayIf #-}
@@ -23,6 +24,9 @@ module RWPAS.Level
   , impassable
   -- * Simulation
   , cycleLevel
+  -- * Decorations
+  , Decoration(..)
+  , decorationByCoordinate
   -- * Actor handling
   --
   -- Some of these functions are in RWPAS.Control instead that's a bit higher
@@ -119,6 +123,14 @@ addPortal portal portal_id = execState $ do
           Nothing -> IS.singleton portal_id
           Just set -> IS.insert portal_id set
 
+decorationByCoordinate :: LevelCoordinates -> Lens' Level Decoration
+decorationByCoordinate coords = lens get_it set_it
+ where
+  get_it lvl = fromMaybe NotDecorated (lvl^.decorations.at coords)
+  set_it lvl NotDecorated = lvl & decorations.at coords .~ Nothing
+  set_it lvl x = lvl & decorations.at coords .~ Just x
+{-# INLINE decorationByCoordinate #-}
+
 -- | Generate a level with a generator function.
 generateLevel :: Text -> Int -> Int -> (Int -> Int -> TerrainFeature) -> Level
 generateLevel name w h generator = (emptyLevel name)
@@ -143,6 +155,7 @@ emptyLevel name = Level { _terrain    = generate 1 1 $ \_ _ -> fromIntegral $ fr
                    , _actorAIs      = mempty
                    , _portals       = mempty
                    , _portalKeys    = mempty
+                   , _decorations   = mempty
                    , _levelName     = name }
 
 updateActorMemories :: ActorID -> M.Map LevelCoordinates TerrainFeature -> Level -> Level
@@ -187,6 +200,7 @@ roomLevel (V2 w h) = Level { _terrain       = makeOneRoom w h
                            , _actorMemories = mempty
                            , _portals       = mempty
                            , _portalKeys    = mempty
+                           , _decorations   = mempty
                            , _levelName     = "Rectangular Room" }
  where
   makeOneRoom w h = generate (w+1) (h+1) $ \x y ->
@@ -375,18 +389,23 @@ levelFieldOfView x_extent y_extent coords level level_id get_level i_see =
             return $ Just new_coords
 {-# INLINE levelFieldOfView #-}
 
+-- | Removes all decorations from a level.
+removeDecorations :: Level -> Level
+removeDecorations lvl = lvl & decorations .~ mempty
+
 -- | Simulates all actors on the level for one cycle.
 cycleLevel :: PrimMonad m => LevelID -> World -> Gen (PrimState m) -> m World
 cycleLevel level_id world rng =
   case world^.levelById level_id of
     Nothing -> return world
-    Just lvl -> flip execStateT world $ ifor_ (lvl^.actorAIs) $ \aid ai -> do
-      w <- get
-      case w^.levelById level_id of
-        Nothing -> return ()
-        Just lvl -> case lvl^.actorById aid of
+    Just (removeDecorations -> lvl) -> flip execStateT world $ do
+      ifor_ (lvl^.actorAIs) $ \aid ai -> do
+        w <- get
+        case w^.levelById level_id of
           Nothing -> return ()
-          Just _ -> do
-            new_world <- stepAI ai rng w aid level_id
-            put new_world
+          Just lvl -> case lvl^.actorById aid of
+            Nothing -> return ()
+            Just _ -> do
+              new_world <- stepAI ai rng w aid level_id
+              put new_world
 

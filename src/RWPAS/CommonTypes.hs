@@ -35,12 +35,15 @@ module RWPAS.CommonTypes
   , actorById
   , actorByCoordinates
   , actorMemories
+  , decorations
   , portals
   , portalKeys
   , terrain
   , insertActor
   , removeActor
   , bestowAI
+  -- * Decoration
+  , Decoration(..)
   -- * AI
   , AI(..)
   , AITransition
@@ -123,10 +126,28 @@ type AITransition m a =
   -> LevelID  -- level ID of the level the actor is in
   -> m World
 
-type FieldOfView = Vector2DG (Word8, Word8)
+type FieldOfView = Vector2DG (Word8, Word8, Word8)
+
+data Decoration
+  = Spikes !Direction8
+  | NotDecorated
+  deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
+
+instance Enum Decoration where
+  toEnum x | x > 1 && x <= 8 =
+    let dir = toEnum (x-1) :: Direction8
+     in Spikes dir
+  toEnum 0 = NotDecorated
+  toEnum _ = error "toEnum (Decoration): invalid value"
+  {-# INLINE toEnum #-}
+
+  fromEnum (Spikes dir) = fromEnum dir + 1
+  fromEnum NotDecorated = 0
+  {-# INLINE fromEnum #-}
 
 data Level = Level
   { _terrain       :: !Vector2D
+  , _decorations   :: !(Map LevelCoordinates Decoration)
   , _portals       :: !(IntMap Portal)
   , _portalKeys    :: !(Map LevelCoordinates IntSet)
   , _actorKeys     :: !(Map LevelCoordinates ActorID)

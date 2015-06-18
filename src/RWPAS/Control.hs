@@ -50,16 +50,17 @@ data Command
   = Move !Direction8
   deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
 
-getCurrentFieldOfView :: World -> (Int, Int, Int -> Int -> (Maybe ActorAppearance, Maybe TerrainFeature))
+getCurrentFieldOfView :: World -> (Int, Int, Int -> Int -> (Maybe ActorAppearance, Maybe TerrainFeature, Decoration))
 getCurrentFieldOfView world =
   (51, 51, \x y ->
-    let (avalue, tvalue) = getAt (V2 x y) (world^.currentFieldOfView) (0, 0)
+    let (avalue, tvalue, dvalue) = getAt (V2 x y) (world^.currentFieldOfView) (0, 0, 0)
      in (if avalue == 0
            then Nothing
            else Just $ toEnum (fromIntegral $ avalue-1)
         ,if tvalue == 0
            then Nothing
-           else Just $ toEnum (fromIntegral $ tvalue-1)))
+           else Just $ toEnum (fromIntegral $ tvalue-1)
+        ,toEnum (fromIntegral dvalue)))
 {-# INLINE getCurrentFieldOfView #-}
 
 computeFieldOfView :: World -> World
@@ -88,7 +89,7 @@ computeFieldOfView world =
             levels.at level_id %= fmap (updateActorMemories actor_id updates)
 
   actually_compute_fov actor = runST $ do
-    fov <- newMutable 51 51 (0, 0)
+    fov <- newMutable 51 51 (0, 0, 0)
     memory_updates <- flip execStateT [] $
       levelFieldOfView 23
                        23
@@ -98,6 +99,7 @@ computeFieldOfView world =
                        (\lid -> world^.levels.at lid) $ \coords (V2 x y) lvl level_id -> do
         let ox = x + 25 - actor^.position._x
             oy = y + 25 - actor^.position._y
+            decoration_value = fromIntegral $ fromEnum $ lvl^.decorationByCoordinate coords
             tfeature = terrainFeature coords lvl
             terrain_value = 1 + fromIntegral (fromEnum tfeature)
             actor_value = fromMaybe 0 $ do
@@ -106,7 +108,7 @@ computeFieldOfView world =
                             return $ 1 + fromIntegral (fromEnum $ ac^.appearance)
 
         modify $ \old -> (coords, level_id, tfeature):old
-        lift $ writeToMutable fov ox oy (actor_value, terrain_value)
+        lift $ writeToMutable fov ox oy (actor_value, terrain_value, decoration_value)
 
     v <- unsafeFreezeVector2D fov
     return (v, memory_updates)
@@ -117,7 +119,7 @@ singletonWorld initial_level = computeFieldOfView World
   { _levels       = IM.singleton 0 (insertActor 1 (sentinelActor & position .~ V2 250 250) initial_level)
   , _currentLevel = 0
   , _currentActor = 1
-  , _currentFieldOfView = generate 51 51 $ \_ _ -> (0, 0)
+  , _currentFieldOfView = generate 51 51 $ \_ _ -> (0, 0, 0)
   , _runningID    = 2 }
 
 currentActorLevelAndCoordinates :: World -> (Level, LevelID, Actor, ActorID)
