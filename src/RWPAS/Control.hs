@@ -140,11 +140,16 @@ computeFieldOfView world =
 
 singletonWorld :: Level -> World
 singletonWorld initial_level = computeFieldOfView World
-  { _levels       = IM.singleton 0 (insertActor 1 (sentinelActor & position .~ V2 250 250) initial_level)
+  { _levels       = IM.singleton 0 (insertActor 1 firstActor initial_level)
   , _currentLevel = 0
   , _currentActor = 1
   , _currentFieldOfView = generate 51 51 $ \_ _ -> (0, 0, 0)
   , _runningID    = 2 }
+ where
+  firstActor = sentinelActor &
+    (position .~ V2 250 250) .
+    (actorHitPoints .~ Just (emptyHitPoints & (hp .~ 30) .
+                                              (maxHp .~ 30)))
 
 currentLevelAndActor :: World -> (Level, LevelID, Actor, ActorID)
 currentLevelAndActor world =

@@ -3,9 +3,11 @@
 --
 
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE MultiWayIf #-}
 
 module RWPAS.AnsiTerminalOutput
@@ -247,10 +249,40 @@ writeLevel world cache = do
                                         ,S.insert tcoords spots)
                                       _ -> (old_cache, spots)
 
+            text_insert tcoords (Square _ fcolor vivid bcolor) (T.unpack -> txt) =
+              void $ flip execStateT tcoords $ for_ txt $ \ch -> do
+                current_coords <- get
+                lift $ modifier (Square ch fcolor vivid bcolor) current_coords
+                modify (+ V2 1 0)
+
+        -- Clear everything
+
         for_ [0..th-1] $ \y ->
           for_ [0..tw-1] $ \x ->
             let tcoords = V2 x y
              in modifier (Square ' ' White False Black) tcoords
+
+        -- HUD stuff
+
+        text_insert (V2 1 2) (Square ' ' White True Black) "Hitpoints:"
+        case actor^.actorHitPoints of
+          Nothing -> text_insert (V2 1 3)
+                                 (Square ' ' Yellow True Black)
+                                 "INVULNERABLE"
+          Just hitp -> text_insert (V2 1 3)
+                                 (Square ' ' (if | hitPointsCritical hitp
+                                                   -> Red
+                                                 | hitPointsHealthy hitp
+                                                   -> Green
+                                                 | otherwise
+                                                   -> Yellow)
+                                             True
+                                             Black)
+                                 (T.pack $ show (hitp^.hitPoints.hp) ++
+                                           " / " ++
+                                           show (hitp^.hitPoints.maxHp))
+
+        -- The map
 
         let (w, h, access) = getCurrentFieldOfView world
 
