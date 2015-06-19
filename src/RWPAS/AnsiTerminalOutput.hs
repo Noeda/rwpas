@@ -111,13 +111,13 @@ runAnsiTerminalRWPAS = do
 
     putStrLn $ "Welcome, " ++ username ++ "."
     putStrLn "Press space to start or q if you don't want to play after all."
-    waitUntilStart
+    waitUntilStart username
  where
-  waitUntilStart = do
+  waitUntilStart username = do
     c <- getChar
-    if | c == ' ' -> startGame
+    if | c == ' ' -> startGame username
        | c == 'q' -> putStrLn "Goodbye."
-       | otherwise -> waitUntilStart
+       | otherwise -> waitUntilStart username
 
 splashScreen :: IO ()
 splashScreen = do
@@ -128,8 +128,8 @@ splashScreen = do
   putStrLn "(c) 2015 Mikko Juola"
   putStrLn ""
 
-startGame :: IO ()
-startGame = do
+startGame :: String -> IO ()
+startGame username = do
   rng <- createSystemRandom
   (forest, rid) <- newForestArena rng 3
   let initial_world' = singletonWorld forest
@@ -154,7 +154,7 @@ startGame = do
                       then clearScreen *> return (newCache tw th)
                       else return cache
 
-    new_cache <- writeLevel world actual_cache
+    new_cache <- writeLevel world actual_cache username
 
     cmd <- getNextCommand
     case performCommand cmd world of
@@ -225,8 +225,9 @@ type ScreenCache = Map (V2 Int) Square
 -- This overwrites the whole screen.
 writeLevel :: World
            -> ScreenCache
+           -> String
            -> IO ScreenCache
-writeLevel world cache = do
+writeLevel world cache username = do
   -- TODO: don't so wastefully write to terminal, we could get by with much
   -- less.
   setSGR [Reset]
@@ -264,12 +265,14 @@ writeLevel world cache = do
 
         -- HUD stuff
 
-        text_insert (V2 1 2) (Square ' ' White True Black) "Hitpoints:"
+        text_insert (V2 1 2) (Square ' ' White True Black) (T.pack username)
+
+        text_insert (V2 1 4) (Square ' ' White True Black) "Hitpoints:"
         case actor^.actorHitPoints of
-          Nothing -> text_insert (V2 1 3)
+          Nothing -> text_insert (V2 1 5)
                                  (Square ' ' Yellow True Black)
                                  "INVULNERABLE"
-          Just hitp -> text_insert (V2 1 3)
+          Just hitp -> text_insert (V2 1 5)
                                  (Square ' ' (if | hitPointsCritical hitp
                                                    -> Red
                                                  | hitPointsHealthy hitp
