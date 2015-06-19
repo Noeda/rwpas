@@ -465,7 +465,8 @@ cycleLevel level_id world rng =
     Nothing -> return world
     Just lvl ->
       let new_world = world & levelById level_id .~ Just (removeDecorations lvl)
-       in flip execStateT new_world $
+       in flip execStateT new_world $ do
+            -- Step all the actor AIs
             ifor_ (lvl^.actorAIs) $ \aid ai -> do
               w <- get
               case w^.levelById level_id of
@@ -475,6 +476,23 @@ cycleLevel level_id world rng =
                   Just _ -> do
                     new_world <- stepAI ai rng w aid level_id
                     put new_world
+
+            -- Remove actors that have had their HP drop zero
+            w <- get
+            let (_, _, _, player_id) = currentLevelAndActor w
+            case w^.levelById level_id of
+              Nothing -> return ()
+              Just new_level -> do
+                let fixed_level = flip execState new_level $
+                      ifor_ (new_level^.actors) $ \aid ac ->
+                        -- Don't remove the player actor. Player actors are
+                        -- immune to being removed by hp loss (this case is
+                        -- handled specially)
+                        when (aid /= player_id) $
+                          case ac^?actorHitPoints._Just.hp of
+                            Just x | x <= 0 -> actorById aid .= Nothing
+                            _ -> return ()
+                levelById level_id .= Just fixed_level
 
 -- | Lens to an actor using some actor ID.
 actorById :: ActorID -> Lens' Level (Maybe Actor)
