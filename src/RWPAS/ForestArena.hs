@@ -18,7 +18,7 @@ import Linear.V2
 import RWPAS.Actor
 import RWPAS.AIControlledActor
 import RWPAS.AIControlledActor.BeastFrog
-import RWPAS.CommonTypes ( RunningID )
+import RWPAS.Control ( RunningID )
 import RWPAS.Level
 import RWPAS.Rectangle
 import System.Random.MWC

@@ -22,6 +22,7 @@ module RWPAS.Level
   , levelName
   , levelSize
   , impassable
+  , actorAIs
   -- * Simulation
   , cycleLevel
   -- * Decorations
@@ -35,7 +36,6 @@ module RWPAS.Level
   , insertActor
   , tryMoveActor
   , removeActor
-  , actors
   , actorById
   , actorByCoordinates
   , updateActorMemories
@@ -44,6 +44,7 @@ module RWPAS.Level
   , LevelCoordinates
   , Size
   , LevelID
+  , diagonalDistance
   -- * Computing field of view
   , levelFieldOfView
   -- * Stepping
@@ -56,8 +57,11 @@ import           Control.Monad.Primitive
 import           Control.Monad.State.Strict
 import           Data.Data
 import           Data.Foldable
+import           Data.IntMap ( IntMap )
 import qualified Data.IntMap as IM
+import           Data.IntSet ( IntSet )
 import qualified Data.IntSet as IS
+import           Data.Map.Strict ( Map )
 import qualified Data.Map.Strict as M
 import           Data.Maybe
 import           Data.Text ( Text )
@@ -65,16 +69,77 @@ import           GHC.Generics
 import           Linear.V2
 import           RWPAS.Actor
 import           RWPAS.AIControlledActor
-import           RWPAS.CommonTypes
+import {-# SOURCE #-} RWPAS.Control
 import           RWPAS.Direction
 import           RWPAS.FieldOfView
 import           RWPAS.TwoDimensionalVector
+import           RWPAS.WorldCoordinates
 import           System.Random.MWC
+
+data Decoration
+  = Spikes !Direction8
+  | NotDecorated
+  deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
+
+instance Enum Decoration where
+  toEnum x | x >= 1 && x <= 8 =
+    let dir = toEnum (x-1) :: Direction8
+     in Spikes dir
+  toEnum 0 = NotDecorated
+  toEnum _ = error "toEnum (Decoration): invalid value"
+  {-# INLINE toEnum #-}
+
+  fromEnum (Spikes dir) = fromEnum dir + 1
+  fromEnum NotDecorated = 0
+  {-# INLINE fromEnum #-}
+
+data Level = Level
+  { _terrain       :: !Vector2D
+  , _decorations   :: !(Map LevelCoordinates Decoration)
+  , _portals       :: !(IntMap Portal)
+  , _portalKeys    :: !(Map LevelCoordinates IntSet)
+  , _actorKeys     :: !(Map LevelCoordinates ActorID)
+  , _actorAIs      :: !(IntMap AI)
+  , _actors        :: !(IntMap Actor)
+  , _actorMemories :: !(Map ActorID (Map LevelCoordinates TerrainFeature))
+  , _levelName     :: !Text }
+  deriving ( Eq, Ord, Show, Typeable, Generic )
+
+-- | Coordinates relative to some `Level`.
+type LevelCoordinates = V2 Int
+
+type LevelID = Int
+
+data Portal = Portal
+  { _axis                       :: !Direction4
+  , _targetLevel                :: !LevelID
+  , _targetLevelAxisTopPosition :: !Int
+  , _targetLevelAxisPosition    :: !Int
+  , _portalLength               :: !Int
+  , _axisTopPosition            :: !Int
+  , _axisPosition               :: !Int }
+  deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
 
 -- | Describes the size of something.
 type Size = V2 Int
 
+data TerrainFeature
+  = Floor
+  | Wall
+  | Planks
+  | PlanksFloor
+  | Tree1
+  | Tree2
+  | Dirt
+  | Grass
+  | Rock   -- ^ Same as `Wall` but completely black.
+  deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic, Enum )
+
+type PortalID = Int
+
+
 -- Derive lenses here
+makeLenses ''Level
 makeLenses ''Portal
 
 -- | If there's no feature at some coordinate, what we should assume it is?
@@ -410,4 +475,52 @@ cycleLevel level_id world rng =
                   Just _ -> do
                     new_world <- stepAI ai rng w aid level_id
                     put new_world
+
+-- | Lens to an actor using some actor ID.
+actorById :: ActorID -> Lens' Level (Maybe Actor)
+actorById aid = actors.at aid
+
+actorByCoordinates :: LevelCoordinates -> Level -> Maybe ActorID
+actorByCoordinates coords level = level^.actorKeys.at coords
+
+levelSize :: Level -> V2 Int
+levelSize lvl = V2 (viewWidth (lvl^.terrain)) (viewHeight (lvl^.terrain))
+{-# INLINE levelSize #-}
+
+-- | Returns the diagonal distance between two coordinates.
+diagonalDistance :: V2 Int -> V2 Int -> Int
+diagonalDistance (V2 x1 y1) (V2 x2 y2) =
+  max (abs $ x1-x2) (abs $ y1-y2)
+{-# INLINE diagonalDistance #-}
+
+-- | Inserts an actor somewhere on the level.
+--
+-- Actor already at the target position is overwritten, if there was anything
+-- there.
+insertActor :: ActorID -> Actor -> Level -> Level
+insertActor aid actor =
+  (actors.at aid .~ Just actor) .
+  (actorKeys.at (actor^.position) .~ Just aid)
+
+-- | Gives an artificial intelligence to an actor.
+--
+-- Does nothing if the given actor is not on the level.
+bestowAI :: ActorID -> AI -> Level -> Level
+bestowAI aid ai level =
+  case level^.actorById aid of
+    Nothing -> level
+    Just _ -> level & actorAIs.at aid .~ Just ai
+
+-- | Removes an actor from the level.
+--
+-- Does nothing if the actor is not in the level.
+removeActor :: ActorID -> Level -> Level
+removeActor aid level =
+  case level^.actors.at aid of
+    Nothing -> level
+    Just actor ->
+      level & (actors.at aid .~ Nothing) .
+              (actorKeys.at (actor^.position) .~ Nothing) .
+              (actorAIs.at aid .~ Nothing)
+
 

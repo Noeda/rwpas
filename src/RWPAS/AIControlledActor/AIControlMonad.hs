@@ -31,7 +31,8 @@ import Data.Data
 import Data.Foldable
 import Data.Ord
 import GHC.Generics
-import RWPAS.CommonTypes
+import RWPAS.Actor
+import RWPAS.AIControlledActor.Types
 import RWPAS.Control
 import RWPAS.Direction
 import RWPAS.Level
@@ -124,7 +125,8 @@ distanceToPlayer = do
   AIControlMonad $ do
     w <- use aiWorld
     l <- use aiActorLevel
-    return $ estimateDistance pos l (w^.currentActor) (w^.currentLevel) w
+    let (_, current_level, _, current_actor) = currentLevelAndActor w
+    return $ estimateDistance pos l current_actor current_level w
 
 -- | Returns a guess on the direction where player might be.
 --
@@ -138,8 +140,7 @@ getDirectionTowardsPlayer = do
     w <- use aiWorld
     l <- use aiActorLevel
 
-    let player_id = w^.currentActor
-        level_id  = w^.currentLevel
+    let (_, level_id, _, player_id) = currentLevelAndActor w
     return $ fst $ minimumBy (comparing snd) $ flip fmap directions8 $ \dir -> (dir, case step dir pos lev of
       SameLevel new_pos -> estimateDistance new_pos l player_id level_id w
       EnterLevel (WorldCoordinates new_pos new_lvl_id) -> estimateDistance new_pos new_lvl_id player_id level_id w)

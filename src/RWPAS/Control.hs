@@ -9,6 +9,9 @@ module RWPAS.Control
   ( World()
   , HasWorld(..)
   , Command(..)
+  , WorldCoordinates(..)
+  , RunningID
+  , runningID
   -- * Construction of worlds
   , singletonWorld
   -- * Accessing levels
@@ -21,7 +24,7 @@ module RWPAS.Control
   -- * Managing actors
   , relocateActor
   , performCommand
-  , currentActorLevelAndCoordinates
+  , currentLevelAndActor
   , actorNextToPlayer
   , estimateDistance )
   where
@@ -33,18 +36,39 @@ import           Control.Monad.ST
 import           Control.Monad.State.Strict
 import           Data.Data
 import           Data.Foldable
+import           Data.IntMap.Strict ( IntMap )
 import qualified Data.IntMap.Strict as IM
 import           Data.Map.Strict ( Map )
 import qualified Data.Map.Strict as M
 import           Data.Maybe
+import           Data.Word
 import           GHC.Generics
 import           Linear.V2
 import           RWPAS.Actor
-import           RWPAS.CommonTypes
 import           RWPAS.Direction
 import           RWPAS.Level
 import           RWPAS.TwoDimensionalVector
+import           RWPAS.WorldCoordinates
 import           System.Random.MWC
+
+type FieldOfView = Vector2DG (Word8, Word8, Word8)
+
+type RunningID = Int
+
+data World = World
+  { _levels             :: !(IntMap Level)
+  , _currentLevel       :: !LevelID
+  , _currentActor       :: !ActorID
+  , _currentFieldOfView :: !FieldOfView
+  , _runningID          :: !RunningID }
+  deriving ( Eq, Ord, Show, Typeable, Generic )
+makeLenses ''World
+
+class HasWorld a where
+  world :: Lens' a World
+
+instance HasWorld World where
+  world = lens id (\_ new -> new)
 
 data Command
   = Move !Direction8
@@ -122,11 +146,12 @@ singletonWorld initial_level = computeFieldOfView World
   , _currentFieldOfView = generate 51 51 $ \_ _ -> (0, 0, 0)
   , _runningID    = 2 }
 
-currentActorLevelAndCoordinates :: World -> (Level, LevelID, Actor, ActorID)
-currentActorLevelAndCoordinates world =
+currentLevelAndActor :: World -> (Level, LevelID, Actor, ActorID)
+currentLevelAndActor world =
   let level = fromMaybe (emptyLevel "Unnamed level") (world^.levels.at (world^.currentLevel))
       actor = fromMaybe sentinelActor (level^.actorById (world^.currentActor))
    in (level, world^.currentLevel, actor, world^.currentActor)
+{-# INLINE currentLevelAndActor #-}
 
 performCommand :: Command -> World -> Maybe World
 performCommand (Move dir) world = flip execStateT world $ do
@@ -211,7 +236,6 @@ estimateDistance coords lvl1 aid2 lvl2 world
   Just ac2 = ac2'
 {-# INLINE estimateDistance #-}
 
--- | Returns direction that points to the direction of another actor.
---
--- Not guaranteed to be accurate. Because portals can make world topology
--- tricky, it might sometimes point to a direction that 
+levelById :: LevelID -> Lens' World (Maybe Level)
+levelById lid = levels.at lid
+

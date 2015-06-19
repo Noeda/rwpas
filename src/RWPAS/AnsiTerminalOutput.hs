@@ -34,7 +34,6 @@ import GHC.Generics
 import Linear.V2
 import RWPAS.Actor
 import RWPAS.Control
-import RWPAS.CommonTypes
 import RWPAS.Direction
 import RWPAS.ForestArena
 import RWPAS.Level
@@ -231,7 +230,7 @@ writeLevel world cache = do
   setSGR [Reset]
   V2 tw th <- getWindowSize
 
-  let (lvl, _, actor, actor_id) = currentActorLevelAndCoordinates world
+  let (lvl, _, actor, actor_id) = currentLevelAndActor world
       level_title = lvl^.levelName
 
       set_cell_attributes cell =

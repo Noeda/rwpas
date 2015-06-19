@@ -17,8 +17,8 @@ import Data.SafeCopy
 import GHC.Generics
 import RWPAS.AIControlledActor.AIControlMonad
 import RWPAS.AIControlledActor.Types
-import RWPAS.CommonTypes
 import RWPAS.Direction
+import RWPAS.Level
 import RWPAS.Turn
 import System.Random.MWC
 

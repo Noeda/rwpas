@@ -19,7 +19,7 @@ library
                        RWPAS.AIControlledActor.BeastFrog
                        RWPAS.AIControlledActor.Types
                        RWPAS.Control
-                       RWPAS.CommonTypes
+--                       RWPAS.CommonTypes
                        RWPAS.Direction
                        RWPAS.Debug
                        RWPAS.FieldOfView
@@ -28,6 +28,7 @@ library
                        RWPAS.Rectangle
                        RWPAS.Turn
                        RWPAS.TwoDimensionalVector
+                       RWPAS.WorldCoordinates
   c-sources:           cbits/windowsize.c
   build-depends:       ansi-terminal >=0.6.2.1  && <1.0
                       ,base          >=4.8      && <5.0
