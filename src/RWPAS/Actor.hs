@@ -11,6 +11,7 @@ module RWPAS.Actor
   , appearance
   , position
   -- * Hit points
+  , hurt
   , actorHitPoints
   , emptyHitPoints
   , hitPointsCritical
@@ -72,6 +73,11 @@ emptyHitPoints :: HitPoints
 emptyHitPoints = HitPoints
   { _hp = 0
   , _maxHp = 0 }
+
+hurt :: Int -> Actor -> Actor
+hurt points actor = case actor^.actorHitPoints of
+  Nothing -> actor
+  Just hitp -> actor & actorHitPoints .~ (Just $ hitp & hp -~ points)
 
 hitPointsCritical :: HasHitPoints a => a -> Bool
 hitPointsCritical thing =

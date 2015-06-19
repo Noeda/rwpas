@@ -23,6 +23,7 @@ module RWPAS.Control
   , computeFieldOfView
   -- * Managing actors
   , relocateActor
+  , actorAt
   , performCommand
   , currentLevelAndActor
   , actorNextToPlayer
@@ -194,6 +195,30 @@ actorNextToPlayer (WorldCoordinates coordinates level_id) world = fromMaybe Fals
   return $ flip any directions8 $ \dir -> case step dir coordinates level of
     SameLevel coords -> test level_id coords
     EnterLevel (WorldCoordinates coords new_level_id) -> test new_level_id coords
+
+-- | Lens to actor ID and actor at some coordinates.
+--
+-- Note: the level to which world coordinates point to must exist. If you try
+-- to set an actor to invalid coordinates, this lens will throw an exception.
+actorAt :: WorldCoordinates -> Lens' World (Maybe (ActorID, Actor))
+actorAt (WorldCoordinates coords level_id) = lens get_it set_it
+ where
+  get_it w = do
+    lvl <- w^.levelById level_id
+    aid <- actorByCoordinates coords lvl
+    ac <- lvl^.actorById aid
+    return (aid, ac)
+
+  set_it w Nothing = fromMaybe w $ do
+    lvl <- w^.levelById level_id
+    aid <- actorByCoordinates coords lvl
+    return $ w & levelById level_id .~ Just (removeActor aid lvl)
+
+  set_it w (Just (aid, ac)) =
+    case w^.levelById level_id of
+      Nothing -> error "set_it.actorAt: non-existent level."
+      Just lvl -> w & levelById level_id .~ Just (insertActor aid (ac & position .~ coords) lvl)
+{-# INLINE actorAt #-}
 
 -- | Takes an actor and moves it to target.
 --

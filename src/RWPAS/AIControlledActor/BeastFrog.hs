@@ -15,8 +15,10 @@ import Data.Data
 import Data.Foldable
 import Data.SafeCopy
 import GHC.Generics
+import RWPAS.Actor
 import RWPAS.AIControlledActor.AIControlMonad
 import RWPAS.AIControlledActor.Types
+import RWPAS.Control
 import RWPAS.Direction
 import RWPAS.Level
 import RWPAS.Turn
@@ -59,7 +61,8 @@ beastFrogTransition = runAIControlMonad $ do
 
             dist <- distanceToPlayer
             if dist <= 1
-              then aiState.spikesOut .= True
+              then do aiState.spikesOut .= True
+                      impaleNeighbours
               else hop
 
   spikes <- use $ aiState.spikesOut
@@ -68,6 +71,13 @@ beastFrogTransition = runAIControlMonad $ do
   emitSpikes =
     for_ directions8 $ \dir ->
       emitDecoration dir (Spikes dir)
+
+  impaleNeighbours = do
+    base_coords <- myCoordinates
+    for_ directions8 $ \dir ->
+      (do impaled_coords <- moveCoords dir base_coords
+          world.actorAt impaled_coords._Just._2 %= hurt 5
+       ) <|> return ()
 
   hop = do
     steps <- rollUniformR (2, 5)

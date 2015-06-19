@@ -11,7 +11,9 @@
 module RWPAS.AIControlledActor.AIControlMonad
   ( myActor
   , myLevel
+  , myCoordinates
   , move
+  , moveCoords
   , HasAIState(..)
   , AIControlMonad()
   , runAIControlMonad
@@ -56,6 +58,14 @@ instance HasAIState (AIControlState m a) a where
 instance HasWorld (AIControlState m a) where
   world = aiWorld
 
+myCoordinates :: Monad m => AIControlMonad m a WorldCoordinates
+myCoordinates = do
+  actor <- myActor
+  AIControlMonad $ do
+    my_level_id <- use aiActorLevel
+    return $ WorldCoordinates (actor^.position) my_level_id
+{-# INLINE myCoordinates #-}
+
 -- | Access the current actor.
 myActor :: Monad m => AIControlMonad m a Actor
 myActor = AIControlMonad $ do
@@ -77,6 +87,20 @@ myLevel = AIControlMonad $ do
     Nothing -> empty
     Just lvl -> return lvl
 {-# INLINE myLevel #-}
+
+-- | Move world coordinates to some direction.
+--
+-- Fails in the `Alternative` instance if the coordinates or destination is
+-- invalid.
+moveCoords :: Monad m => Direction8 -> WorldCoordinates -> AIControlMonad m a WorldCoordinates
+moveCoords dir (WorldCoordinates coords lvl_id) = AIControlMonad $ do
+  w <- use aiWorld
+  case w^.levelById lvl_id of
+    Nothing -> empty
+    Just lvl -> return $ case step dir coords lvl of
+      SameLevel new_coords -> WorldCoordinates new_coords lvl_id
+      EnterLevel new_coords -> new_coords
+{-# INLINE moveCoords #-}
 
 -- | Move actor to some direction.
 --
