@@ -1,10 +1,12 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveGeneric #-}
 
 module RWPAS.AIControlledActor.Types
   ( SentinelAI()
+  , sentinelAI
   , AI(..)
   , AITransition
   , IsAI(..)
@@ -62,7 +64,15 @@ data SentinelAI = SentinelAI
   deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic, Enum )
 deriveSafeCopy 0 'base ''SentinelAI
 
+instance IsAI SentinelAI where
+  initialState _ = return SentinelAI
+  transitionFunction _ _ w _ _ = return w
+  aiName _ = "sessile AI"
+
 stepAI :: PrimMonad m => AI -> Gen (PrimState m) -> World -> ActorID -> LevelID -> m World
 stepAI (AI state) = transitionFunction state
 {-# INLINE stepAI #-}
+
+sentinelAI :: AI
+sentinelAI = AI SentinelAI
 

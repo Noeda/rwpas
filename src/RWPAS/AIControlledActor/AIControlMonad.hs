@@ -10,6 +10,7 @@
 
 module RWPAS.AIControlledActor.AIControlMonad
   ( myActor
+  , myActorID
   , myLevel
   , myCoordinates
   , move
@@ -77,6 +78,11 @@ myActor = AIControlMonad $ do
     Just lvl -> case lvl^.actorById my_actor_id of
       Nothing -> empty
       Just actor -> return actor
+{-# INLINE myActor #-}
+
+myActorID :: Monad m => AIControlMonad m a ActorID
+myActorID = AIControlMonad $ use aiActor
+{-# INLINE myActorID #-}
 
 -- | Access the current level.
 myLevel :: Monad m => AIControlMonad m a Level
@@ -182,7 +188,7 @@ runAIControlMonad (AIControlMonad monad) actor_state rng world actor_id level_id
     Nothing -> world
     Just ai_control_state ->
       ai_control_state^.aiWorld &
-       levelById level_id._Just.actorAIs.at (ai_control_state^.aiActor) .~ Just (AI $ ai_control_state^.aiActorState)
+       levelById level_id._Just.actorById (ai_control_state^.aiActor)._Just.ai .~ (AI $ ai_control_state^.aiActorState)
 
 rollUniform :: (PrimMonad m, Variate v) => AIControlMonad m a v
 rollUniform = AIControlMonad $ do

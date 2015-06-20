@@ -22,7 +22,6 @@ module RWPAS.Level
   , levelName
   , levelSize
   , impassable
-  , actorAIs
   -- * Simulation
   , cycleLevel
   -- * Decorations
@@ -78,6 +77,7 @@ import           System.Random.MWC
 
 data Decoration
   = Spikes !Direction8
+  | BloodySpikes !Direction8
   | NotDecorated
   deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
 
@@ -85,11 +85,15 @@ instance Enum Decoration where
   toEnum x | x >= 1 && x <= 8 =
     let dir = toEnum (x-1) :: Direction8
      in Spikes dir
+  toEnum x | x >= 9 && x <= 16 =
+    let dir = toEnum (x-9) :: Direction8
+     in BloodySpikes dir
   toEnum 0 = NotDecorated
   toEnum _ = error "toEnum (Decoration): invalid value"
   {-# INLINE toEnum #-}
 
   fromEnum (Spikes dir) = fromEnum dir + 1
+  fromEnum (BloodySpikes dir) = fromEnum dir + 9
   fromEnum NotDecorated = 0
   {-# INLINE fromEnum #-}
 
@@ -99,7 +103,6 @@ data Level = Level
   , _portals       :: !(IntMap Portal)
   , _portalKeys    :: !(Map LevelCoordinates IntSet)
   , _actorKeys     :: !(Map LevelCoordinates ActorID)
-  , _actorAIs      :: !(IntMap AI)
   , _actors        :: !(IntMap Actor)
   , _actorMemories :: !(Map ActorID (Map LevelCoordinates TerrainFeature))
   , _levelName     :: !Text }
@@ -217,7 +220,6 @@ emptyLevel name = Level { _terrain    = generate 1 1 $ \_ _ -> fromIntegral $ fr
                    , _actors        = mempty
                    , _actorMemories = mempty
                    , _actorKeys     = mempty
-                   , _actorAIs      = mempty
                    , _portals       = mempty
                    , _portalKeys    = mempty
                    , _decorations   = mempty
@@ -261,7 +263,6 @@ roomLevel :: Size -> Level
 roomLevel (V2 w h) = Level { _terrain       = makeOneRoom w h
                            , _actors        = mempty
                            , _actorKeys     = mempty
-                           , _actorAIs      = mempty
                            , _actorMemories = mempty
                            , _portals       = mempty
                            , _portalKeys    = mempty
@@ -324,11 +325,9 @@ tryMoveActor aid dir source_level_id level get_level = do
                              isJust (actorByCoordinates new_actor_pos new_level)
             then Nothing
             else Just (level & (actors.at aid .~ Nothing) .
-                               (actorKeys.at actor_pos .~ Nothing) .
-                               (actorAIs.at aid .~ Nothing)
+                               (actorKeys.at actor_pos .~ Nothing)
                       ,Just (new_level_id
                             ,new_level &
-                             (actorAIs.at aid .~ (level^.actorAIs.at aid)) .
                              (actors.at aid .~ Just (actor & position .~ new_actor_pos)) .
                              (actorKeys.at new_actor_pos .~ Just aid) .
                              (if source_level_id == new_level_id
@@ -467,14 +466,15 @@ cycleLevel level_id world rng =
       let new_world = world & levelById level_id .~ Just (removeDecorations lvl)
        in flip execStateT new_world $ do
             -- Step all the actor AIs
-            ifor_ (lvl^.actorAIs) $ \aid ai -> do
+            ifor_ (lvl^.actors) $ \aid ac -> do
+              let actor_ai = ac^.ai
               w <- get
               case w^.levelById level_id of
                 Nothing -> return ()
                 Just lvl -> case lvl^.actorById aid of
                   Nothing -> return ()
                   Just _ -> do
-                    new_world <- stepAI ai rng w aid level_id
+                    new_world <- stepAI actor_ai rng w aid level_id
                     put new_world
 
             -- Remove actors that have had their HP drop zero
@@ -522,12 +522,12 @@ insertActor aid actor =
 
 -- | Gives an artificial intelligence to an actor.
 --
--- Does nothing if the given actor is not on the level.
+-- Replaces any old AI and its state.
 bestowAI :: ActorID -> AI -> Level -> Level
-bestowAI aid ai level =
+bestowAI aid actor_ai level =
   case level^.actorById aid of
     Nothing -> level
-    Just _ -> level & actorAIs.at aid .~ Just ai
+    Just _ -> level & actors.at aid._Just.ai .~ actor_ai
 
 -- | Removes an actor from the level.
 --
@@ -538,7 +538,6 @@ removeActor aid level =
     Nothing -> level
     Just actor ->
       level & (actors.at aid .~ Nothing) .
-              (actorKeys.at (actor^.position) .~ Nothing) .
-              (actorAIs.at aid .~ Nothing)
+              (actorKeys.at (actor^.position) .~ Nothing)
 
 

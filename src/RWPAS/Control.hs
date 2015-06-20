@@ -16,6 +16,7 @@ module RWPAS.Control
   , singletonWorld
   -- * Accessing levels
   , levelById
+  , terrainAt
   -- * Field of view
   , getCurrentFieldOfView
   -- * Simulating the world
@@ -43,7 +44,7 @@ import           Data.Map.Strict ( Map )
 import qualified Data.Map.Strict as M
 import           Data.Maybe
 import           Data.Word
-import           GHC.Generics
+import           GHC.Generics hiding ( to )
 import           Linear.V2
 import           RWPAS.Actor
 import           RWPAS.Direction
@@ -195,6 +196,19 @@ actorNextToPlayer (WorldCoordinates coordinates level_id) world = fromMaybe Fals
   return $ flip any directions8 $ \dir -> case step dir coordinates level of
     SameLevel coords -> test level_id coords
     EnterLevel (WorldCoordinates coords new_level_id) -> test new_level_id coords
+
+-- | Getter to some coordinates in world.
+--
+-- Setting terrain would be so inefficient with a naive lens so we don't have
+-- that here.
+--
+-- Getter instead of a plain function to be consistent with other accessing
+-- functions.
+terrainAt :: WorldCoordinates -> Getter World (Maybe TerrainFeature)
+terrainAt (WorldCoordinates coords level_id) = to $ \w ->
+  case w^.levelById level_id of
+    Nothing -> Nothing
+    Just lvl -> Just $ terrainFeature coords lvl
 
 -- | Lens to actor ID and actor at some coordinates.
 --

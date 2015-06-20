@@ -217,6 +217,15 @@ decorationToCell (Spikes dir) = case dir of
   D8UpRight   -> Square '/'  Black True Black
   D8DownRight -> Square '\\' Black True Black
   D8DownLeft  -> Square '/'  Black True Black
+decorationToCell (BloodySpikes dir) = case dir of
+  D8Up        -> Square '|'  Red True Black
+  D8Down      -> Square '|'  Red True Black
+  D8Left      -> Square '-'  Red True Black
+  D8Right     -> Square '-'  Red True Black
+  D8UpLeft    -> Square '\\' Red True Black
+  D8UpRight   -> Square '/'  Red True Black
+  D8DownRight -> Square '\\' Red True Black
+  D8DownLeft  -> Square '/'  Red True Black
 
 type ScreenCache = Map (V2 Int) Square
 

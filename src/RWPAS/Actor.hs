@@ -7,9 +7,10 @@ module RWPAS.Actor
   , Actor()
   , ActorID
   , ActorAppearance(..)
-  -- * Appearance and position
+  -- * Appearance, position, AI
   , appearance
   , position
+  , ai
   -- * Hit points
   , hurt
   , actorHitPoints
@@ -24,14 +25,15 @@ module RWPAS.Actor
 import Control.Lens
 import Data.Data
 import GHC.Generics
+import {-# SOURCE #-} RWPAS.AIControlledActor.Types
 import Linear.V2
 
 data Actor = Actor
   { _position     :: !ActorPosition
   , _appearance   :: !ActorAppearance
-
+  , _ai           :: !AI
   , _actorHitPoints :: !(Maybe HitPoints) }
-  deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
+  deriving ( Eq, Ord, Show, Typeable, Generic )
 
 data ActorAppearance
   = PlayerCharacter
@@ -62,6 +64,7 @@ sentinelActor :: Actor
 sentinelActor = Actor
   { _position = V2 0 0
   , _appearance = PlayerCharacter
+  , _ai = sentinelAI
   , _actorHitPoints = Nothing }
 
 isDeadByHitPoints :: HasHitPoints a => a -> Bool

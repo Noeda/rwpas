@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveGeneric #-}
 
 module RWPAS.Direction
@@ -11,6 +12,7 @@ module RWPAS.Direction
   where
 
 import Data.Data
+import Data.SafeCopy
 import GHC.Generics
 import Linear.V2
 import System.Random.MWC
@@ -86,4 +88,7 @@ direction4To8 DUp = D8Up
 direction4To8 DDown = D8Down
 direction4To8 DLeft = D8Left
 direction4To8 DRight = D8Right
+
+deriveSafeCopy 0 'base ''Direction4
+deriveSafeCopy 0 'base ''Direction8
 

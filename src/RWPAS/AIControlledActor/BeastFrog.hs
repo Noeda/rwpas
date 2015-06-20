@@ -13,7 +13,10 @@ import Control.Monad
 import Control.Monad.Primitive
 import Data.Data
 import Data.Foldable
+import Data.Maybe
 import Data.SafeCopy
+import Data.Set ( Set )
+import qualified Data.Set as S
 import GHC.Generics
 import RWPAS.Actor
 import RWPAS.AIControlledActor.AIControlMonad
@@ -34,7 +37,8 @@ import System.Random.MWC
 
 data BeastFrogState = BeastFrogState
   { _staminaCounter :: !Turns
-  , _spikesOut :: !Bool }
+  , _spikesOut :: !Bool
+  , _bloodySpikes :: !(Set Direction8) }
   deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
 makeLenses ''BeastFrogState
 deriveSafeCopy 0 'base ''BeastFrogState
@@ -43,7 +47,8 @@ instance IsAI BeastFrogState where
   initialState rng = do
     initial_stamina <- uniformR (3, 6 :: Int) rng
     return BeastFrogState { _staminaCounter = fromIntegral initial_stamina
-                          , _spikesOut = False }
+                          , _spikesOut = False
+                          , _bloodySpikes = S.empty }
 
   transitionFunction = beastFrogTransition
 
@@ -62,21 +67,44 @@ beastFrogTransition = runAIControlMonad $ do
             dist <- distanceToPlayer
             if dist <= 1
               then do aiState.spikesOut .= True
+                      aiState.bloodySpikes .= S.empty
                       impaleNeighbours
               else hop
 
   spikes <- use $ aiState.spikesOut
   when spikes emitSpikes
  where
-  emitSpikes =
+  emitSpikes = do
+    bloodied_ones <- use (aiState.bloodySpikes)
     for_ directions8 $ \dir ->
-      emitDecoration dir (Spikes dir)
+      emitDecoration dir (if S.member dir bloodied_ones
+                            then BloodySpikes dir
+                            else Spikes dir)
 
   impaleNeighbours = do
     base_coords <- myCoordinates
+    aid <- myActorID
     for_ directions8 $ \dir ->
       (do impaled_coords <- moveCoords dir base_coords
           world.actorAt impaled_coords._Just._2 %= hurt 5
+          -- Push back the actor...if we can
+          -- Only push back one step and don't push more than once
+          -- Otherwise strategically placed portals could cause an infinite
+          -- loop, monsters pushing themselves.
+          ac <- use (world.actorAt impaled_coords)
+          when (isJust ac) $ do
+            aiState.bloodySpikes %= S.insert dir
+            let Just (impaled_aid, _) = ac
+            pushed_back_coords <- moveCoords dir impaled_coords
+            pushed_back_actor <- use (world.actorAt pushed_back_coords)
+            pushed_back_feature <- use (world.terrainAt pushed_back_coords)
+            case (pushed_back_actor, pushed_back_feature) of
+                -- Push back if there's free space behind and we are not
+                -- impaling ourselves.
+                (Nothing, Just f) | not (impassable f) && impaled_aid /= aid -> do
+                  world.actorAt impaled_coords .= Nothing
+                  world.actorAt pushed_back_coords .= ac
+                _ -> return ()
        ) <|> return ()
 
   hop = do
