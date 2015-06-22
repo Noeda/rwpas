@@ -26,6 +26,7 @@ import Data.Data
 import Data.Map.Strict ( Map )
 import qualified Data.Map.Strict as M
 import Data.Maybe
+import Data.Monoid
 import qualified Data.Set as S
 import qualified Data.Text as T
 import Foreign.C.Types
@@ -293,6 +294,21 @@ writeLevel world cache username = do
                                  (T.pack $ show (hitp^.hitPoints.hp) ++
                                            " / " ++
                                            show (hitp^.hitPoints.maxHp))
+
+        -- Messages
+        let msgs = currentMessages world
+            insert_message [] _ = return ()
+            insert_message (msg:rest) y | y <= 6 || y >= th-1 = return ()
+                                        | otherwise = do
+                                            let Message n txt = msg
+                                            text_insert (V2 1 y)
+                                                        (Square ' ' White False Black)
+                                                        (if n > 1
+                                                           then T.pack (show n) <> "x " <> txt
+                                                           else txt)
+                                            insert_message rest (y-1)
+
+        insert_message msgs (th-2)
 
         -- The map
 

@@ -15,6 +15,7 @@ module RWPAS.AIControlledActor.AIControlMonad
   , myCoordinates
   , move
   , moveCoords
+  , emitMessage
   , HasAIState(..)
   , AIControlMonad()
   , runAIControlMonad
@@ -33,6 +34,7 @@ import Control.Monad.Trans.Maybe
 import Data.Data
 import Data.Foldable
 import Data.Ord
+import Data.Text ( Text )
 import GHC.Generics
 import RWPAS.Actor
 import RWPAS.AIControlledActor.Types
@@ -224,4 +226,7 @@ emitDecoration dir decoration = do
           Just new_lvl ->
             unless (impassable $ terrainFeature new_pos new_lvl) $
               aiWorld .= (w & levelById new_lvl_id._Just.decorationByCoordinate new_pos .~ decoration)
+
+emitMessage :: Monad m => Text -> AIControlMonad m a ()
+emitMessage txt = AIControlMonad $ aiWorld %= insertMessage txt
 

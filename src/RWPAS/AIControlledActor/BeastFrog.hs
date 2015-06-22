@@ -84,6 +84,9 @@ beastFrogTransition = runAIControlMonad $ do
   impaleNeighbours = do
     base_coords <- myCoordinates
     aid <- myActorID
+    w <- use world
+    let (_, _, _, player_id) = currentLevelAndActor w
+
     for_ directions8 $ \dir ->
       (do impaled_coords <- moveCoords dir base_coords
           world.actorAt impaled_coords._Just._2 %= hurt 5
@@ -98,6 +101,9 @@ beastFrogTransition = runAIControlMonad $ do
             pushed_back_coords <- moveCoords dir impaled_coords
             pushed_back_actor <- use (world.actorAt pushed_back_coords)
             pushed_back_feature <- use (world.terrainAt pushed_back_coords)
+
+            when (impaled_aid == player_id) $ emitMessage "You are impaled!"
+
             case (pushed_back_actor, pushed_back_feature) of
                 -- Push back if there's free space behind and we are not
                 -- impaling ourselves.

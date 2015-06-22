@@ -14,6 +14,10 @@ module RWPAS.Control
   , runningID
   -- * Construction of worlds
   , singletonWorld
+  -- * Messages
+  , insertMessage
+  , currentMessages
+  , Message(..)
   -- * Accessing levels
   , levelById
   , terrainAt
@@ -43,6 +47,8 @@ import qualified Data.IntMap.Strict as IM
 import           Data.Map.Strict ( Map )
 import qualified Data.Map.Strict as M
 import           Data.Maybe
+import qualified Data.Sequence as SQ
+import           Data.Text ( Text )
 import           Data.Word
 import           GHC.Generics hiding ( to )
 import           Linear.V2
@@ -57,12 +63,19 @@ type FieldOfView = Vector2DG (Word8, Word8, Word8)
 
 type RunningID = Int
 
+-- | Type of messages. The integer in constructor is the number of times the
+-- message has been repeated.
+data Message
+  = Message !Int !Text
+  deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
+
 data World = World
   { _levels             :: !(IntMap Level)
   , _currentLevel       :: !LevelID
   , _currentActor       :: !ActorID
   , _currentFieldOfView :: !FieldOfView
-  , _runningID          :: !RunningID }
+  , _runningID          :: !RunningID
+  , _messages           :: !(SQ.Seq Message) }
   deriving ( Eq, Ord, Show, Typeable, Generic )
 makeLenses ''World
 
@@ -75,6 +88,25 @@ instance HasWorld World where
 data Command
   = Move !Direction8
   deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
+
+insertMessage :: Text -> World -> World
+insertMessage txt world =
+  if SQ.length (new_world^.messages) > 100
+    then new_world & messages .~ SQ.take 100 (new_world^.messages)
+    else new_world
+ where
+  new_world = world & messages .~
+    case SQ.viewl (world^.messages) of
+      SQ.EmptyL ->
+        SQ.singleton (Message 1 txt)
+      Message n old_txt SQ.:< rest
+        | old_txt == txt -> Message (n+1) old_txt SQ.<| rest
+        | otherwise      -> Message 1 txt SQ.<| world^.messages
+
+-- | Returns most recent messages, ordered by time. The most recent message is
+-- first.
+currentMessages :: World -> [Message]
+currentMessages world = toList (world^.messages)
 
 getCurrentFieldOfView :: World -> (Int, Int, Int -> Int -> (Maybe ActorAppearance, Maybe TerrainFeature, Decoration))
 getCurrentFieldOfView world =
@@ -146,7 +178,8 @@ singletonWorld initial_level = computeFieldOfView World
   , _currentLevel = 0
   , _currentActor = 1
   , _currentFieldOfView = generate 51 51 $ \_ _ -> (0, 0, 0)
-  , _runningID    = 2 }
+  , _runningID    = 2
+  , _messages     = mempty }
  where
   firstActor = sentinelActor &
     (position .~ V2 250 250) .
