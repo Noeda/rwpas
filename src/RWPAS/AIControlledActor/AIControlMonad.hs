@@ -16,6 +16,7 @@ module RWPAS.AIControlledActor.AIControlMonad
   , move
   , moveCoords
   , emitMessage
+  , withNChance
   , HasAIState(..)
   , AIControlMonad()
   , runAIControlMonad
@@ -229,4 +230,10 @@ emitDecoration dir decoration = do
 
 emitMessage :: Monad m => Text -> AIControlMonad m a ()
 emitMessage txt = AIControlMonad $ aiWorld %= insertMessage txt
+
+-- | With a chance in 1/N, execute the action.
+withNChance :: PrimMonad m => Int -> AIControlMonad m a () -> AIControlMonad m a ()
+withNChance n action = do
+  x <- rollUniformR (1, n)
+  when (x == 1) action
 
