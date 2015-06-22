@@ -219,14 +219,14 @@ decorationToCell (Spikes dir) = case dir of
   D8DownRight -> Square '\\' Black True Black
   D8DownLeft  -> Square '/'  Black True Black
 decorationToCell (BloodySpikes dir) = case dir of
-  D8Up        -> Square '|'  Red True Black
-  D8Down      -> Square '|'  Red True Black
-  D8Left      -> Square '-'  Red True Black
-  D8Right     -> Square '-'  Red True Black
-  D8UpLeft    -> Square '\\' Red True Black
-  D8UpRight   -> Square '/'  Red True Black
-  D8DownRight -> Square '\\' Red True Black
-  D8DownLeft  -> Square '/'  Red True Black
+  D8Up        -> Square '|'  Red False Black
+  D8Down      -> Square '|'  Red False Black
+  D8Left      -> Square '-'  Red False Black
+  D8Right     -> Square '-'  Red False Black
+  D8UpLeft    -> Square '\\' Red False Black
+  D8UpRight   -> Square '/'  Red False Black
+  D8DownRight -> Square '\\' Red False Black
+  D8DownLeft  -> Square '/'  Red False Black
 
 type ScreenCache = Map (V2 Int) Square
 
@@ -316,7 +316,7 @@ writeLevel world cache username = do
 
         for_ [0..h-1] $ \y ->
           for_ [0..w-1] $ \x -> do
-            let ox = x + tw `div` 2 - (w `div` 2)
+            let ox = tw - w + x
                 oy = y + th `div` 2 - (h `div` 2)
                 op = V2 ox oy
                 lp = V2 (actor^.position._x + x - (w `div` 2))
