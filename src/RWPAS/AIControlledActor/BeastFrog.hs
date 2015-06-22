@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE MultiWayIf #-}
 
 module RWPAS.AIControlledActor.BeastFrog
   ( BeastFrogState() )
@@ -71,6 +72,8 @@ beastFrogTransition = runAIControlMonad $ do
                       impaleNeighbours
               else hop
 
+  withNChance 30 emitNoises
+
   spikes <- use $ aiState.spikesOut
   when spikes emitSpikes
  where
@@ -80,6 +83,13 @@ beastFrogTransition = runAIControlMonad $ do
       emitDecoration dir (if S.member dir bloodied_ones
                             then BloodySpikes dir
                             else Spikes dir)
+
+  emitNoises = do
+    dist <- distanceToPlayer
+    if | dist < 5     -> emitMessage "RIBBIT!!"
+       | dist < 10    -> emitMessage "Ribbit!"
+       | dist < 30    -> emitMessage "ribbit"
+       | otherwise -> return ()
 
   impaleNeighbours = do
     base_coords <- myCoordinates
