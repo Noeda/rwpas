@@ -7,7 +7,7 @@ author:              Mikko Juola
 maintainer:          mikjuo@gmail.com
 copyright:           2015 (c) Mikko Juola
 build-type:          Simple
-extra-source-files:  README.md
+extra-source-files:  README.md stack.yaml
 cabal-version:       >=1.10
 
 library
