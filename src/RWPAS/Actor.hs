@@ -25,7 +25,7 @@ module RWPAS.Actor
 import Control.Lens
 import Data.Data
 import GHC.Generics
-import {-# SOURCE #-} RWPAS.AIControlledActor.Types
+import {-# SOURCE #-} RWPAS.Control.Types
 import Linear.V2
 
 data Actor = Actor

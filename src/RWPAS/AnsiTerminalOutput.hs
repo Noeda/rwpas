@@ -36,10 +36,10 @@ import Foreign.Storable
 import GHC.Generics
 import Linear.V2
 import RWPAS.Actor
-import RWPAS.Control
 import RWPAS.Direction
 import RWPAS.ForestArena
 import RWPAS.Level
+import RWPAS.World
 import System.Console.ANSI
 import System.Console.GetOpt
 import System.Environment

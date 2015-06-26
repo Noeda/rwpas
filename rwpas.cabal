@@ -13,12 +13,12 @@ cabal-version:       >=1.10
 library
   exposed-modules:     RWPAS.Actor
                        RWPAS.AnsiTerminalOutput
-                       RWPAS.AIControlledActor
-                       RWPAS.AIControlledActor.AIControlMonad
-                       RWPAS.AIControlledActor.ListOfAIs
-                       RWPAS.AIControlledActor.BeastFrog
-                       RWPAS.AIControlledActor.Types
                        RWPAS.Control
+                       RWPAS.Control.ControlMonad
+                       RWPAS.Control.ListOfAIs
+                       RWPAS.Control.BeastFrog
+                       RWPAS.Control.Types
+                       RWPAS.World
                        RWPAS.Direction
                        RWPAS.Debug
                        RWPAS.FieldOfView

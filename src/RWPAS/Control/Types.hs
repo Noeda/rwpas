@@ -4,7 +4,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveGeneric #-}
 
-module RWPAS.AIControlledActor.Types
+module RWPAS.Control.Types
   ( SentinelAI()
   , sentinelAI
   , AI(..)
@@ -19,7 +19,7 @@ import qualified Data.ByteString as B
 import Data.Data
 import Data.SafeCopy
 import GHC.Generics
-import {-# SOURCE #-} RWPAS.Control
+import {-# SOURCE #-} RWPAS.World
 import RWPAS.Actor
 import {-# SOURCE #-} RWPAS.Level
 import System.Random.MWC

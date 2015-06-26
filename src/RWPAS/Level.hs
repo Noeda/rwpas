@@ -29,7 +29,7 @@ module RWPAS.Level
   , decorationByCoordinate
   -- * Actor handling
   --
-  -- Some of these functions are in RWPAS.Control instead that's a bit higher
+  -- Some of these functions are in RWPAS.World instead that's a bit higher
   -- level than these.
   , getMemoryAt
   , insertActor
@@ -67,8 +67,8 @@ import           Data.Text ( Text )
 import           GHC.Generics
 import           Linear.V2
 import           RWPAS.Actor
-import           RWPAS.AIControlledActor
-import {-# SOURCE #-} RWPAS.Control
+import           RWPAS.Control
+import {-# SOURCE #-} RWPAS.World
 import           RWPAS.Direction
 import           RWPAS.FieldOfView
 import           RWPAS.TwoDimensionalVector

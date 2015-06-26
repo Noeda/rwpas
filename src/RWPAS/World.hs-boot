@@ -1,6 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 
-module RWPAS.Control where
+module RWPAS.World where
   import Control.Lens hiding ( Level )
   import RWPAS.Actor
   import {-# SOURCE #-} RWPAS.Level

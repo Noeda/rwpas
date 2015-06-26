@@ -1,4 +1,4 @@
-module RWPAS.AIControlledActor.Types where
+module RWPAS.Control.Types where
   data AI
   instance Eq AI
   instance Ord AI

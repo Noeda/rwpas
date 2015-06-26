@@ -16,11 +16,11 @@ import qualified Data.Set as S
 import GHC.Generics
 import Linear.V2
 import RWPAS.Actor
-import RWPAS.AIControlledActor
-import RWPAS.AIControlledActor.BeastFrog
-import RWPAS.Control ( RunningID )
+import RWPAS.Control
+import RWPAS.Control.BeastFrog
 import RWPAS.Level
 import RWPAS.Rectangle
+import RWPAS.World ( RunningID )
 import System.Random.MWC
 
 newForestArena :: forall m. PrimMonad m

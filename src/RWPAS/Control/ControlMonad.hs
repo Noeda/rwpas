@@ -8,7 +8,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveFunctor #-}
 
-module RWPAS.AIControlledActor.AIControlMonad
+module RWPAS.Control.ControlMonad
   ( myActor
   , myActorID
   , myLevel
@@ -38,10 +38,10 @@ import Data.Ord
 import Data.Text ( Text )
 import GHC.Generics
 import RWPAS.Actor
-import RWPAS.AIControlledActor.Types
 import RWPAS.Control
 import RWPAS.Direction
 import RWPAS.Level
+import RWPAS.World
 import System.Random.MWC
 
 data AIControlState m a = AIControlState

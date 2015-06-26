@@ -4,7 +4,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE MultiWayIf #-}
 
-module RWPAS.AIControlledActor.BeastFrog
+module RWPAS.Control.BeastFrog
   ( BeastFrogState() )
   where
 
@@ -20,12 +20,12 @@ import Data.Set ( Set )
 import qualified Data.Set as S
 import GHC.Generics
 import RWPAS.Actor
-import RWPAS.AIControlledActor.AIControlMonad
-import RWPAS.AIControlledActor.Types
-import RWPAS.Control
+import RWPAS.Control.ControlMonad
+import RWPAS.Control.Types
 import RWPAS.Direction
 import RWPAS.Level
 import RWPAS.Turn
+import RWPAS.World
 import System.Random.MWC
 
 -- Beast frogs:
