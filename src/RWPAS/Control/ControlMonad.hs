@@ -3,10 +3,12 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE RankNTypes #-}
 
 module RWPAS.Control.ControlMonad
   ( myActor
@@ -41,7 +43,7 @@ import RWPAS.Actor
 import RWPAS.Control
 import RWPAS.Direction
 import RWPAS.Level
-import RWPAS.World
+import RWPAS.World as W
 import System.Random.MWC
 
 data AIControlState m a = AIControlState
@@ -62,20 +64,23 @@ instance HasAIState (AIControlState m a) a where
 instance HasWorld (AIControlState m a) where
   world = aiWorld
 
-myCoordinates :: Monad m => AIControlMonad m a WorldCoordinates
+instance HasControllingActor (AIControlState m a) where
+  controllingLevel = aiActorLevel
+  controllingActor = aiActor
+
+myCoordinates :: ControlActorMonad s m => m WorldCoordinates
 myCoordinates = do
   actor <- myActor
-  AIControlMonad $ do
-    my_level_id <- use aiActorLevel
-    return $ WorldCoordinates (actor^.position) my_level_id
+  my_level_id <- use controllingLevel
+  return $ WorldCoordinates (actor^.position) my_level_id
 {-# INLINE myCoordinates #-}
 
 -- | Access the current actor.
-myActor :: Monad m => AIControlMonad m a Actor
-myActor = AIControlMonad $ do
-  my_actor_id <- use aiActor
-  my_level_id <- use aiActorLevel
-  world <- use aiWorld
+myActor :: ControlActorMonad s m => m Actor
+myActor = do
+  my_actor_id <- use controllingActor
+  my_level_id <- use controllingLevel
+  world <- use world
   case world^.levelById my_level_id of
     Nothing -> empty
     Just lvl -> case lvl^.actorById my_actor_id of
@@ -83,15 +88,19 @@ myActor = AIControlMonad $ do
       Just actor -> return actor
 {-# INLINE myActor #-}
 
-myActorID :: Monad m => AIControlMonad m a ActorID
-myActorID = AIControlMonad $ use aiActor
+class HasControllingActor s where
+  controllingActor :: Lens' s ActorID
+  controllingLevel :: Lens' s LevelID
+
+myActorID :: ControlActorMonad s m => m ActorID
+myActorID = use controllingActor
 {-# INLINE myActorID #-}
 
 -- | Access the current level.
-myLevel :: Monad m => AIControlMonad m a Level
-myLevel = AIControlMonad $ do
-  my_level_id <- use aiActorLevel
-  world <- use aiWorld
+myLevel :: ControlActorMonad s m => m Level
+myLevel = do
+  my_level_id <- use controllingLevel
+  world <- use world
   case world^.levelById my_level_id of
     Nothing -> empty
     Just lvl -> return lvl
@@ -101,9 +110,9 @@ myLevel = AIControlMonad $ do
 --
 -- Fails in the `Alternative` instance if the coordinates or destination is
 -- invalid.
-moveCoords :: Monad m => Direction8 -> WorldCoordinates -> AIControlMonad m a WorldCoordinates
-moveCoords dir (WorldCoordinates coords lvl_id) = AIControlMonad $ do
-  w <- use aiWorld
+moveCoords :: ControlMonad s m => Direction8 -> WorldCoordinates -> m WorldCoordinates
+moveCoords dir (WorldCoordinates coords lvl_id) = do
+  w <- use world
   case w^.levelById lvl_id of
     Nothing -> empty
     Just lvl -> return $ case step dir coords lvl of
@@ -114,11 +123,11 @@ moveCoords dir (WorldCoordinates coords lvl_id) = AIControlMonad $ do
 -- | Move actor to some direction.
 --
 -- Fails in the `Alternative` instance if actor cannot move there.
-move :: Monad m => Direction8 -> AIControlMonad m a ()
-move dir = AIControlMonad $ do
-  aid <- use aiActor
-  lid <- use aiActorLevel
-  w <- use aiWorld
+move :: ControlActorMonad s m => Direction8 -> m ()
+move dir = do
+  aid <- use controllingActor
+  lid <- use controllingLevel
+  w <- use world
   case w^.levelById lid of
     Nothing -> empty
     Just level -> case level^.actorById aid of
@@ -126,15 +135,15 @@ move dir = AIControlMonad $ do
       Just actor -> case step dir (actor^.position) level of
         SameLevel tgt -> do
           guardPassable level tgt
-          aiWorld.levelById lid._Just %= removeActor aid
-          aiWorld.levelById lid._Just %= insertActor aid (actor & position .~ tgt)
+          world.levelById lid._Just %= removeActor aid
+          world.levelById lid._Just %= insertActor aid (actor & position .~ tgt)
         EnterLevel (WorldCoordinates tgt new_lid) -> case w^.levelById new_lid of
           Nothing -> empty
           Just new_level -> do
             guardPassable new_level tgt
-            aiActorLevel .= new_lid
-            aiWorld.levelById lid._Just %= removeActor aid
-            aiWorld.levelById new_lid._Just %= insertActor aid (actor & position .~ tgt)
+            controllingLevel .= new_lid
+            world.levelById lid._Just %= removeActor aid
+            world.levelById new_lid._Just %= insertActor aid (actor & position .~ tgt)
  where
   guardPassable level target_coordinates =
     case actorByCoordinates target_coordinates level of
@@ -152,31 +161,29 @@ newtype AIControlMonad m a r = AIControlMonad (StateT (AIControlState m a) (Mayb
            , MonadState (AIControlState m a) )
 
 -- | Returns an estimated distance to player.
-distanceToPlayer :: (Monad m, IsAI a) => AIControlMonad m a Int
+distanceToPlayer :: ControlActorMonad s m => m Int
 distanceToPlayer = do
   pos <- (^.position) <$> myActor
-  AIControlMonad $ do
-    w <- use aiWorld
-    l <- use aiActorLevel
-    let (_, current_level, _, current_actor) = currentLevelAndActor w
-    return $ estimateDistance pos l current_actor current_level w
+  w <- use world
+  l <- use controllingLevel
+  let (_, current_level, _, current_actor) = currentLevelAndActor w
+  return $ estimateDistance pos l current_actor current_level w
 
 -- | Returns a guess on the direction where player might be.
 --
 -- Does not do path searching, simply points to the direction of the player.
 -- This is also cheap.
-getDirectionTowardsPlayer :: (Monad m, IsAI a) => AIControlMonad m a Direction8
+getDirectionTowardsPlayer :: ControlActorMonad s m => m Direction8
 getDirectionTowardsPlayer = do
   pos <- (^.position) <$> myActor
   lev <- myLevel
-  AIControlMonad $ do
-    w <- use aiWorld
-    l <- use aiActorLevel
+  w <- use world
+  l <- use controllingLevel
 
-    let (_, level_id, _, player_id) = currentLevelAndActor w
-    return $ fst $ minimumBy (comparing snd) $ flip fmap directions8 $ \dir -> (dir, case step dir pos lev of
-      SameLevel new_pos -> estimateDistance new_pos l player_id level_id w
-      EnterLevel (WorldCoordinates new_pos new_lvl_id) -> estimateDistance new_pos new_lvl_id player_id level_id w)
+  let (_, level_id, _, player_id) = currentLevelAndActor w
+  return $ fst $ minimumBy (comparing snd) $ flip fmap directions8 $ \dir -> (dir, case step dir pos lev of
+    SameLevel new_pos -> estimateDistance new_pos l player_id level_id w
+    EnterLevel (WorldCoordinates new_pos new_lvl_id) -> estimateDistance new_pos new_lvl_id player_id level_id w)
 
 runAIControlMonad :: (Monad m, IsAI a) => AIControlMonad m a () -> AITransition m a
 runAIControlMonad (AIControlMonad monad) actor_state rng world actor_id level_id = do
@@ -205,28 +212,30 @@ rollUniformR range = AIControlMonad $ do
   lift $ lift $ uniformR range rng
 {-# INLINE rollUniformR #-}
 
+type ControlMonad s m = (Alternative m, MonadState s m, HasWorld s)
+type ControlActorMonad s m = (Alternative m, MonadState s m, HasWorld s, HasControllingActor s)
+
 -- | Emits a decoration directly next to the actor to some direction.
 --
 -- Does not emit the decoration if the target position contains impassable
 -- terrain (in that case this function is a no-op). Other actors don't block
 -- decorations (but the decoration might not be seen under the actor).
-emitDecoration :: Monad m => Direction8 -> Decoration -> AIControlMonad m a ()
+emitDecoration :: ControlActorMonad s m => Direction8 -> Decoration -> m ()
 emitDecoration dir decoration = do
   actor <- myActor
   lvl <- myLevel
-  AIControlMonad $ do
-    w <- use aiWorld
-    lvl_id <- use aiActorLevel
-    case step dir (actor^.position) lvl of
-      SameLevel new_pos ->
-        unless (impassable $ terrainFeature new_pos lvl) $
-          aiWorld .= (w & levelById lvl_id._Just.decorationByCoordinate new_pos .~ decoration)
-      EnterLevel (WorldCoordinates new_pos new_lvl_id) ->
-        case w^.levelById new_lvl_id of
-          Nothing -> empty
-          Just new_lvl ->
-            unless (impassable $ terrainFeature new_pos new_lvl) $
-              aiWorld .= (w & levelById new_lvl_id._Just.decorationByCoordinate new_pos .~ decoration)
+  w <- use world
+  lvl_id <- use controllingLevel
+  case step dir (actor^.position) lvl of
+    SameLevel new_pos ->
+      unless (impassable $ terrainFeature new_pos lvl) $
+        world .= (w & levelById lvl_id._Just.decorationByCoordinate new_pos .~ decoration)
+    EnterLevel (WorldCoordinates new_pos new_lvl_id) ->
+      case w^.levelById new_lvl_id of
+        Nothing -> empty
+        Just new_lvl ->
+          unless (impassable $ terrainFeature new_pos new_lvl) $
+            world .= (w & levelById new_lvl_id._Just.decorationByCoordinate new_pos .~ decoration)
 
 emitMessage :: Monad m => Text -> AIControlMonad m a ()
 emitMessage txt = AIControlMonad $ aiWorld %= insertMessage txt
