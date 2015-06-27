@@ -9,6 +9,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE LambdaCase #-}
 
 module RWPAS.AnsiTerminalOutput
   (
@@ -38,6 +39,7 @@ import Linear.V2
 import RWPAS.Actor
 import RWPAS.Direction
 import RWPAS.ForestArena
+import RWPAS.Item
 import RWPAS.Level
 import RWPAS.World
 import System.Console.ANSI
@@ -158,7 +160,7 @@ startGame username = do
     new_cache <- writeLevel world actual_cache username
 
     cmd <- getNextCommand
-    case performCommand cmd world of
+    performCommand cmd rng world >>= \case
       Nothing -> gameLoop world new_cache tw th rng
       Just w -> do
         new_world' <- cycleWorld rng w
@@ -189,11 +191,15 @@ charToCommand '7' = Just (Move D8UpLeft)
 charToCommand '9' = Just (Move D8UpRight)
 charToCommand '1' = Just (Move D8DownLeft)
 charToCommand '3' = Just (Move D8DownRight)
+charToCommand ' ' = Just ActivateAura
 charToCommand _ = Nothing
 
 appearanceToCell :: ActorAppearance -> Square
 appearanceToCell PlayerCharacter = Square '@' White True Black
 appearanceToCell BeastFrog = Square 'F' Green True Black
+
+itemAppearanceToCell :: ItemAppearance -> Square
+itemAppearanceToCell BeastFrogCorpse = Square 'F' Red False Black
 
 -- | Mapping from level features to characters to show on screen.
 featureToCell :: TerrainFeature -> Square
@@ -323,9 +329,10 @@ writeLevel world cache username = do
                         (actor^.position._y + y - (h `div` 2))
 
             case access x y of
-              (Just ap, _, _) -> modifier (appearanceToCell ap) op
-              (_, _, dec) | dec /= NotDecorated -> modifier (decorationToCell dec) op
-              (_, Just t, _)  -> modifier (featureToCell t) op
+              (Just ap, _, _, _) -> modifier (appearanceToCell ap) op
+              (_, _, dec, _) | dec /= NotDecorated -> modifier (decorationToCell dec) op
+              (_, _, _, Just i) -> modifier (itemAppearanceToCell i) op
+              (_, Just t, _, _)  -> modifier (featureToCell t) op
               _ -> case getMemoryAt actor_id lvl lp of
                 Nothing -> return ()
                 Just v  ->

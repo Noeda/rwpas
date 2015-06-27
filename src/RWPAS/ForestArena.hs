@@ -85,8 +85,12 @@ placeFrogs n rng rid level = do
            Nothing -> do
              frog_ai <- initialState rng :: m BeastFrogState
              let new_level = bestowAI rid (AI frog_ai) $
-                             insertActor rid (sentinelActor &
+                             insertActor rid (sentinelActor "Type-A Frog" &
                                (position .~ V2 x y) .
+                               (actorHitPoints .~
+                                (Just $ emptyHitPoints &
+                                  (maxHp .~ 20) .
+                                  (hp .~ 20))) .
                                (appearance .~ BeastFrog)) level
              placeFrogs (n-1) rng (rid+1) new_level
            Just _ -> placeFrogs n rng rid level

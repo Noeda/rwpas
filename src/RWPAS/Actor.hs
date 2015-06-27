@@ -10,6 +10,7 @@ module RWPAS.Actor
   -- * Appearance, position, AI
   , appearance
   , position
+  , actorName
   , ai
   -- * Hit points
   , hurt
@@ -24,6 +25,7 @@ module RWPAS.Actor
 
 import Control.Lens
 import Data.Data
+import Data.Text ( Text )
 import GHC.Generics
 import {-# SOURCE #-} RWPAS.Control.Types
 import Linear.V2
@@ -32,6 +34,7 @@ data Actor = Actor
   { _position     :: !ActorPosition
   , _appearance   :: !ActorAppearance
   , _ai           :: !AI
+  , _actorName    :: !Text
   , _actorHitPoints :: !(Maybe HitPoints) }
   deriving ( Eq, Ord, Show, Typeable, Generic )
 
@@ -60,11 +63,12 @@ instance HasActor Actor where
 
 -- | Sentinel actor. Not meant to be used as-is, take it and modify it to be a
 -- proper actor.
-sentinelActor :: Actor
-sentinelActor = Actor
+sentinelActor :: Text -> Actor
+sentinelActor name = Actor
   { _position = V2 0 0
   , _appearance = PlayerCharacter
   , _ai = sentinelAI
+  , _actorName = name
   , _actorHitPoints = Nothing }
 
 isDeadByHitPoints :: HasHitPoints a => a -> Bool

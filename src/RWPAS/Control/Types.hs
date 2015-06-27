@@ -11,17 +11,19 @@ module RWPAS.Control.Types
   , AITransition
   , IsAI(..)
   -- * Stepping AI
-  , stepAI )
+  , stepAI
+  , stepDeadAI )
   where
 
+import Control.Lens
 import Control.Monad.Primitive
 import qualified Data.ByteString as B
 import Data.Data
 import Data.SafeCopy
 import GHC.Generics
-import {-# SOURCE #-} RWPAS.World
+import RWPAS.Level.Type
+import RWPAS.World.Type
 import RWPAS.Actor
-import {-# SOURCE #-} RWPAS.Level
 import System.Random.MWC
 import Unsafe.Coerce
 
@@ -30,6 +32,10 @@ class (SafeCopy a, Eq a, Ord a, Show a, Read a, Typeable a) => IsAI a where
 
   initialState :: PrimMonad m => Gen (PrimState m) -> m a
   transitionFunction :: PrimMonad m => AITransition m a
+  deadTransition :: PrimMonad m => AITransition m a
+  deadTransition _ _ world actor_id level_id =
+    return $ world & levelById level_id %~ fmap (removeActor actor_id)
+
   aiName :: Proxy a -> B.ByteString
 
 -- | Function that decides the next action of an AI.
@@ -72,6 +78,10 @@ instance IsAI SentinelAI where
 stepAI :: PrimMonad m => AI -> Gen (PrimState m) -> World -> ActorID -> LevelID -> m World
 stepAI (AI state) = transitionFunction state
 {-# INLINE stepAI #-}
+
+stepDeadAI :: PrimMonad m => AI -> Gen (PrimState m) -> World -> ActorID -> LevelID -> m World
+stepDeadAI (AI state) = deadTransition state
+{-# INLINE stepDeadAI #-}
 
 sentinelAI :: AI
 sentinelAI = AI SentinelAI

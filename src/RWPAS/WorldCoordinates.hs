@@ -11,11 +11,11 @@ module RWPAS.WorldCoordinates
 import Control.Lens
 import Data.Data
 import GHC.Generics
-import {-# SOURCE #-} RWPAS.Level
+import Linear.V2
 
 data WorldCoordinates = WorldCoordinates
-  { _levelCoordinates :: !LevelCoordinates
-  , _levelID          :: !LevelID }
+  { _levelCoordinates :: !(V2 Int) -- LevelCoordinates
+  , _levelID          :: !Int }    -- LevelID
   deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
 makeLenses ''WorldCoordinates
 

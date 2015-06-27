@@ -6,4 +6,8 @@ warnings
 debug_log.txt
 role-ideas.md
 .stack-work/
+*.o
+*.hi
+*.o-boot
+*.hi-boot
 

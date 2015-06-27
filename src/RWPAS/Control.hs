@@ -10,7 +10,7 @@ import Data.Proxy
 import Data.SafeCopy
 import Data.Serialize.Put
 import {-# SOURCE #-} RWPAS.Control.ListOfAIs
-import {-# SOURCE #-} RWPAS.Control.Types
+import RWPAS.Control.Types
 
 proxy :: a -> Proxy a
 proxy _ = Proxy

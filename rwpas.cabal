@@ -13,20 +13,26 @@ cabal-version:       >=1.10
 library
   exposed-modules:     RWPAS.Actor
                        RWPAS.AnsiTerminalOutput
+                       RWPAS.BresenhamLine
                        RWPAS.Control
                        RWPAS.Control.ControlMonad
                        RWPAS.Control.ListOfAIs
                        RWPAS.Control.BeastFrog
                        RWPAS.Control.Types
-                       RWPAS.World
+                       RWPAS.Item
                        RWPAS.Direction
                        RWPAS.Debug
                        RWPAS.FieldOfView
                        RWPAS.ForestArena
                        RWPAS.Level
+                       RWPAS.Level.Type
+                       RWPAS.Role.Psychic
                        RWPAS.Rectangle
+                       RWPAS.RNG
                        RWPAS.Turn
                        RWPAS.TwoDimensionalVector
+                       RWPAS.World
+                       RWPAS.World.Type
                        RWPAS.WorldCoordinates
   c-sources:           cbits/windowsize.c
   build-depends:       ansi-terminal >=0.6.2.1  && <1.0

@@ -5,6 +5,7 @@
 module RWPAS.Direction
   ( Direction4(..)
   , Direction8(..)
+  , deltaToDirection8
   , direction4ToDelta
   , direction8ToDelta
   , direction4To8
@@ -66,6 +67,18 @@ instance Variate Direction4 where
 directions8 :: [Direction8]
 directions8 = [D8Up, D8Left, D8Right, D8Down
               ,D8UpLeft, D8UpRight, D8DownLeft, D8DownRight]
+
+deltaToDirection8 :: V2 Int -> Maybe Direction8
+deltaToDirection8 (V2 1 0) = Just D8Right
+deltaToDirection8 (V2 (-1) 0) = Just D8Left
+deltaToDirection8 (V2 0 1) = Just D8Down
+deltaToDirection8 (V2 0 (-1)) = Just D8Up
+deltaToDirection8 (V2 1 1) = Just D8DownRight
+deltaToDirection8 (V2 1 (-1)) = Just D8UpRight
+deltaToDirection8 (V2 (-1) 1) = Just D8DownLeft
+deltaToDirection8 (V2 (-1) (-1)) = Just D8UpLeft
+deltaToDirection8 _ = Nothing
+{-# INLINE deltaToDirection8 #-}
 
 direction4ToDelta :: Direction4 -> V2 Int
 direction4ToDelta DUp = V2 0 (-1)

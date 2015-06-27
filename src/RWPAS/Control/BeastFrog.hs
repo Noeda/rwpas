@@ -23,9 +23,10 @@ import RWPAS.Actor
 import RWPAS.Control.ControlMonad
 import RWPAS.Control.Types
 import RWPAS.Direction
+import RWPAS.Item
 import RWPAS.Level
 import RWPAS.Turn
-import RWPAS.World
+import RWPAS.World.Type
 import System.Random.MWC
 
 -- Beast frogs:
@@ -52,8 +53,12 @@ instance IsAI BeastFrogState where
                           , _bloodySpikes = S.empty }
 
   transitionFunction = beastFrogTransition
+  deadTransition = beastFrogDead
 
   aiName _ = "BeastFrog"
+
+beastFrogDead :: PrimMonad m => AITransition m BeastFrogState
+beastFrogDead = runAIControlMonad $ leaveCorpse BeastFrogCorpse "frog"
 
 beastFrogTransition :: PrimMonad m => AITransition m BeastFrogState
 beastFrogTransition = runAIControlMonad $ do
