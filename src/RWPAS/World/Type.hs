@@ -45,6 +45,7 @@ import qualified Data.Map.Strict as M
 import Data.IntMap.Strict ( IntMap )
 import qualified Data.IntMap.Strict as IM
 import Data.Maybe
+import Data.SafeCopy
 import qualified Data.Sequence as SQ
 import Data.Text ( Text )
 import Data.Word
@@ -75,6 +76,36 @@ data World = World
   , _messages           :: !(SQ.Seq Message) }
   deriving ( Eq, Ord, Show, Typeable, Generic )
 makeLenses ''World
+deriveSafeCopy 0 'base ''Message
+deriveSafeCopy 0 'base ''World
+
+{-instance SafeCopy World where
+  version = 0
+  kind = base
+
+  putCopy world = contain $ do
+    safePut (world^.levels)
+    safePut (world^.currentLevel)
+    safePut (world^.currentActor)
+    safePut (world^.runningID)
+    safePut (world^.messages)
+    safePut (toRep $ fromString (show $ world^.currentFieldOfView) :: B.ByteString)
+
+  getCopy = contain $ do
+    lvls <- safeGet
+    cur_level <- safeGet
+    cur_actor <- safeGet
+    cur_running_id <- safeGet
+    messages <- safeGet
+
+    fov_str <- safeGet
+
+    return World { _levels = lvls
+                 , _currentLevel = cur_level
+                 , _currentActor = cur_actor
+                 , _currentFieldOfView = read $ toString $ fromRep (fov_str :: B.ByteString)
+                 , _runningID = cur_running_id
+                 , _messages = messages } -}
 
 class HasWorld a where
   world :: Lens' a World

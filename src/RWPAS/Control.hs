@@ -20,6 +20,7 @@ instance SafeCopy AI where
   kind = base
 
   getCopy = contain $ asum aiList
+
   putCopy (AI a) = contain $ do
     let n = aiName (proxy $ asProxyTypeOf a Proxy)
     if B.length n > 255

@@ -29,6 +29,7 @@ library
                        RWPAS.Role.Psychic
                        RWPAS.Rectangle
                        RWPAS.RNG
+                       RWPAS.SafeCopyOrphanInstances
                        RWPAS.Turn
                        RWPAS.TwoDimensionalVector
                        RWPAS.World
@@ -50,6 +51,7 @@ library
                       ,transformers  >=0.4      && <1.0
                       ,unix          >=2.7.1    && <3.0
                       ,vector        >=0.10     && <1.0
+                      ,zlib          >=0.5      && <1.0
   hs-source-dirs:      src
   ghc-options:         -Wall -fno-warn-name-shadowing
   default-language:    Haskell2010

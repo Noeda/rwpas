@@ -25,8 +25,11 @@ module RWPAS.Actor
 
 import Control.Lens
 import Data.Data
+import Data.SafeCopy
 import Data.Text ( Text )
 import GHC.Generics
+import RWPAS.SafeCopyOrphanInstances()
+import {-# SOURCE #-} RWPAS.Control
 import {-# SOURCE #-} RWPAS.Control.Types
 import Linear.V2
 
@@ -54,6 +57,9 @@ data HitPoints = HitPoints
 
 makeLenses ''Actor
 makeClassy ''HitPoints
+deriveSafeCopy 0 'base ''Actor
+deriveSafeCopy 0 'base ''ActorAppearance
+deriveSafeCopy 0 'base ''HitPoints
 
 class HasActor a where
   actor :: Lens' a Actor

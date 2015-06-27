@@ -22,6 +22,7 @@ import           Data.Data
 import           Data.Vector.Unboxed ( Vector )
 import           Data.Vector.Unboxed.Mutable
 import qualified Data.Vector.Unboxed as V
+import           Data.SafeCopy
 import           Data.Word
 import           GHC.Generics
 import           Linear.V2
@@ -38,6 +39,23 @@ data Vector2DGMut s a = Vector2DGMut
   , _mheight :: !Int }
 makeLenses ''Vector2DG
 makeLenses ''Vector2DGMut
+
+instance (SafeCopy a, Unbox a) => SafeCopy (Vector2DG a) where
+  version = 0
+  kind = base
+
+  putCopy v = contain $ do
+    safePut (v^.vec)
+    safePut (v^.width)
+    safePut (v^.height)
+
+  getCopy = contain $ do
+    vec <- safeGet
+    w <- safeGet
+    h <- safeGet
+    return Vector2DG { _vec = vec
+                     , _width = w
+                     , _height = h }
 
 type Vector2D = Vector2DG Word8
 

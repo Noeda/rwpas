@@ -7,7 +7,7 @@ import Control.Monad
 import Data.Proxy
 import Data.SafeCopy
 import Data.Serialize.Get
-import RWPAS.Control
+import {-# SOURCE #-} RWPAS.Control
 import RWPAS.Control.BeastFrog
 
 assumeType :: IsAI a => Proxy a -> Get ()
@@ -18,5 +18,7 @@ assumeType proxy = do
 
 aiList :: [Get AI]
 aiList = [AI <$> (do assumeType (Proxy :: Proxy BeastFrogState)
-                     safeGet :: Get BeastFrogState)]
+                     safeGet :: Get BeastFrogState)
+         ,AI <$> (do assumeType (Proxy :: Proxy SentinelAI)
+                     safeGet :: Get SentinelAI)]
 

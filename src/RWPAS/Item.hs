@@ -15,6 +15,7 @@ module RWPAS.Item
 
 import Control.Lens
 import Data.Data
+import Data.SafeCopy
 import Data.Text
 import GHC.Generics
 
@@ -28,6 +29,8 @@ data Item = Item
   , _itemName :: !Text }
   deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
 makeLenses ''Item
+deriveSafeCopy 0 'base ''Item
+deriveSafeCopy 0 'base ''ItemAppearance
 
 sentinelItem :: Text -> Item
 sentinelItem name = Item

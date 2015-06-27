@@ -64,6 +64,7 @@ import qualified Data.IntSet as IS
 import           Data.Map.Strict ( Map )
 import qualified Data.Map.Strict as M
 import           Data.Maybe
+import           Data.SafeCopy
 import           Data.Text ( Text )
 import           GHC.Generics
 import           Linear.V2
@@ -71,6 +72,7 @@ import           RWPAS.Actor
 import           RWPAS.Direction
 import           RWPAS.FieldOfView
 import           RWPAS.Item
+import           RWPAS.SafeCopyOrphanInstances()
 import           RWPAS.TwoDimensionalVector
 import           RWPAS.WorldCoordinates
 
@@ -144,6 +146,10 @@ type PortalID = Int
 -- Derive lenses here
 makeLenses ''Level
 makeLenses ''Portal
+deriveSafeCopy 0 'base ''Level
+deriveSafeCopy 0 'base ''Portal
+deriveSafeCopy 0 'base ''TerrainFeature
+deriveSafeCopy 0 'base ''Decoration
 
 -- | If there's no feature at some coordinate, what we should assume it is?
 defaultTerrainFeature :: TerrainFeature

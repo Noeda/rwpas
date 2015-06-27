@@ -22,12 +22,18 @@ import Control.Lens hiding ( Level )
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.State.Strict
+import Codec.Compression.Zlib
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
 import Data.Foldable
 import Data.Data
 import Data.Map.Strict ( Map )
 import qualified Data.Map.Strict as M
 import Data.Maybe
 import Data.Monoid
+import Data.SafeCopy
+import Data.Serialize.Get
+import Data.Serialize.Put
 import qualified Data.Set as S
 import qualified Data.Text as T
 import Foreign.C.Types
@@ -47,6 +53,7 @@ import System.Console.GetOpt
 import System.Environment
 import System.Exit
 import System.IO
+import System.IO.Error
 import System.Posix.IO
 import System.Posix.Terminal
 import System.Posix.User
@@ -113,14 +120,33 @@ runAnsiTerminalRWPAS = do
     splashScreen
 
     putStrLn $ "Welcome, " ++ username ++ "."
-    putStrLn "Press space to start or q if you don't want to play after all."
-    waitUntilStart username
+
+    maybe_world <- tryLoadSave
+    case maybe_world of
+      Left "" -> do
+        putStrLn "Press space to start or q if you don't want to play after all."
+        waitUntilStart username Nothing
+      Left err -> do
+        putStrLn $ "Loading a world failed: " <> err
+        putStrLn "If you press start, I'll start a new game for you. Or you can press q to quit."
+        waitUntilStart username Nothing
+      Right world -> do
+        putStrLn "Press space to continue old game or q if you don't want to play after all."
+        waitUntilStart username (Just world)
  where
-  waitUntilStart username = do
+  waitUntilStart username w = do
     c <- getChar
-    if | c == ' ' -> startGame username
+    if | c == ' ' -> startGame username w
        | c == 'q' -> putStrLn "Goodbye."
-       | otherwise -> waitUntilStart username
+       | otherwise -> waitUntilStart username w
+
+tryLoadSave :: IO (Either String World)
+tryLoadSave =
+  tryIOError (decompress . BL.fromStrict <$> B.readFile "rwpas.save") >>= \case
+    Left _ -> return (Left "")
+    Right bs -> return $ case runGet safeGet (BL.toStrict bs) of
+      Left err -> Left err
+      Right w -> Right w
 
 splashScreen :: IO ()
 splashScreen = do
@@ -131,12 +157,15 @@ splashScreen = do
   putStrLn "(c) 2015 Mikko Juola"
   putStrLn ""
 
-startGame :: String -> IO ()
-startGame username = do
+startGame :: String -> Maybe World -> IO ()
+startGame username loaded_world = do
   rng <- createSystemRandom
-  (forest, rid) <- newForestArena rng 3
-  let initial_world' = singletonWorld forest
-      initial_world = initial_world' & runningID .~ rid
+  initial_world <- case loaded_world of
+    Just w -> return w
+    Nothing -> do
+      (forest, rid) <- newForestArena rng 3
+      let initial_world' = singletonWorld forest
+      return $ initial_world' & runningID .~ rid
 
   setSGR [Reset]
   clearScreen
@@ -160,12 +189,19 @@ startGame username = do
     new_cache <- writeLevel world actual_cache username
 
     cmd <- getNextCommand
-    performCommand cmd rng world >>= \case
-      Nothing -> gameLoop world new_cache tw th rng
-      Just w -> do
-        new_world' <- cycleWorld rng w
-        let new_world'' = computeFieldOfView new_world'
-        gameLoop new_world'' new_cache tw th rng
+    case cmd of
+      WorldCommand wcmd -> performCommand wcmd rng world >>= \case
+        Nothing -> gameLoop world new_cache tw th rng
+        Just w -> do
+          new_world' <- cycleWorld rng w
+          let new_world'' = computeFieldOfView new_world'
+          gameLoop new_world'' new_cache tw th rng
+
+      Save -> do
+        let save_file = "rwpas.save"
+            saved = runPut (safePut world)
+            zipped = compress (BL.fromStrict saved)
+        BL.writeFile save_file zipped
 
   getNextCommand = do
     maybe_cmd <- charToCommand <$> getChar
@@ -173,25 +209,30 @@ startGame username = do
       Nothing -> getNextCommand
       Just cmd -> return cmd
 
+data GameCommand
+  = WorldCommand !Command
+  | Save
+  deriving ( Eq, Ord, Show, Read, Typeable, Data, Generic )
 
-charToCommand :: Char -> Maybe Command
-charToCommand 'h' = Just (Move D8Left)
-charToCommand 'k' = Just (Move D8Up)
-charToCommand 'j' = Just (Move D8Down)
-charToCommand 'l' = Just (Move D8Right)
-charToCommand 'y' = Just (Move D8UpLeft)
-charToCommand 'u' = Just (Move D8UpRight)
-charToCommand 'b' = Just (Move D8DownLeft)
-charToCommand 'n' = Just (Move D8DownRight)
-charToCommand '4' = Just (Move D8Left)
-charToCommand '8' = Just (Move D8Up)
-charToCommand '2' = Just (Move D8Down)
-charToCommand '6' = Just (Move D8Right)
-charToCommand '7' = Just (Move D8UpLeft)
-charToCommand '9' = Just (Move D8UpRight)
-charToCommand '1' = Just (Move D8DownLeft)
-charToCommand '3' = Just (Move D8DownRight)
-charToCommand ' ' = Just ActivateAura
+charToCommand :: Char -> Maybe GameCommand
+charToCommand 'h' = Just (WorldCommand $ Move D8Left)
+charToCommand 'k' = Just (WorldCommand $ Move D8Up)
+charToCommand 'j' = Just (WorldCommand $ Move D8Down)
+charToCommand 'l' = Just (WorldCommand $ Move D8Right)
+charToCommand 'y' = Just (WorldCommand $ Move D8UpLeft)
+charToCommand 'u' = Just (WorldCommand $ Move D8UpRight)
+charToCommand 'b' = Just (WorldCommand $ Move D8DownLeft)
+charToCommand 'n' = Just (WorldCommand $ Move D8DownRight)
+charToCommand '4' = Just (WorldCommand $ Move D8Left)
+charToCommand '8' = Just (WorldCommand $ Move D8Up)
+charToCommand '2' = Just (WorldCommand $ Move D8Down)
+charToCommand '6' = Just (WorldCommand $ Move D8Right)
+charToCommand '7' = Just (WorldCommand $ Move D8UpLeft)
+charToCommand '9' = Just (WorldCommand $ Move D8UpRight)
+charToCommand '1' = Just (WorldCommand $ Move D8DownLeft)
+charToCommand '3' = Just (WorldCommand $ Move D8DownRight)
+charToCommand ' ' = Just (WorldCommand ActivateAura)
+charToCommand 'S' = Just Save
 charToCommand _ = Nothing
 
 appearanceToCell :: ActorAppearance -> Square
